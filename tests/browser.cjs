@@ -1,0 +1,30 @@
+// Optional development check: requires Playwright and a Chromium executable.
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const path=require('node:path');
+const os=require('node:os');
+(async()=>{
+ const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});
+ const errors=[],requests=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(/^https?:/.test(r.url())&&!r.url().startsWith('http://127.0.0.1:8765/'))requests.push(r.url());});
+ await page.goto(process.env.TEST_URL || 'file://'+path.resolve(__dirname,'../index.html'));
+ await page.screenshot({path:path.join(os.tmpdir(),'resonance-home.png'),fullPage:true});
+ await page.click('a[href="#lab"]');await page.click('#start');await page.waitForTimeout(700);await page.click('#pause');
+ let t=Number(await page.locator('#time').textContent());assert.ok(t>0);await page.waitForTimeout(200);assert.equal(Number(await page.locator('#time').textContent()),t);
+ await page.fill('#n-D','.3');await page.locator('#n-D').dispatchEvent('change');assert.equal(await page.locator('#time').textContent(),'0.0');
+ await page.fill('#n-D','-1');await page.locator('#n-D').dispatchEvent('change');assert.equal(await page.inputValue('#n-D'),'0.3');assert.ok(await page.locator('#notice').textContent());
+ await page.click('[data-preset="0.22"]');await page.selectOption('#speed','1500');await page.click('#start');await page.waitForTimeout(1500);await page.click('#pause');
+ await page.screenshot({path:path.join(os.tmpdir(),'resonance-lab.png'),fullPage:true});
+ await page.click('#language');assert.equal(await page.locator('html').getAttribute('lang'),'en');assert.equal(await page.locator('#start').textContent(),'Start');
+ await page.click('a[href="#theory"]');assert.ok((await page.locator('#theoryContent').textContent()).includes('BAOAB'));
+ await page.click('a[href="#authors"]');assert.ok((await page.locator('#authors').textContent()).includes('Stanislav Kapitonov'));
+ await page.click('nav a[href="#lab"]');await page.click('#sweep');await page.waitForTimeout(100);await page.click('#cancel');assert.ok((await page.locator('#sweepStatus').textContent()).includes('Cancelled'));
+ await page.click('#sweep');await page.waitForFunction(()=>document.getElementById('sweepStatus').textContent.startsWith('Maximum'),{},{timeout:120000});
+ const state=await page.evaluate(()=>({data:sweepData,params:sweepParams}));assert.equal(state.data.length,12);assert.ok(state.data[5].amplitude>state.data[0].amplitude*3);console.log(JSON.stringify(state));
+ const downloadPromise=page.waitForEvent('download');await page.click('#exportSweep');const download=await downloadPromise;await download.saveAs(path.join(os.tmpdir(),'resonance.csv'));
+ await page.screenshot({path:path.join(os.tmpdir(),'resonance-complete.png'),fullPage:true});
+ await page.click('#language');await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(os.tmpdir(),'resonance-mobile.png'),fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+ await page.click('#stop');assert.equal(await page.locator('#time').textContent(),'0.0');
+ assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);console.log('Browser checks passed: controls, RU/EN, cancellation, full sweep, CSV, mobile, no network, no console errors.');
+ await browser.close();
+})().catch(e=>{console.error(e);process.exit(1);});

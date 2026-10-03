@@ -1,0 +1,1 @@
+{"name":"stochastic-resonance-lab","version":"1.0.0","private":true,"description":"Offline bilingual inertial Langevin teaching laboratory","scripts":{"test":"node --test tests/physics.test.js"},"engines":{"node":">=20"}}
