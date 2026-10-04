@@ -2,3 +2,12 @@
 .avatar{font-size:23px;line-height:1.2;text-align:center}.controls,.parameter,.plots{min-width:0}
 @media(max-width:900px){.workspace{grid-template-columns:minmax(0,1fr)}#parameters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.parameter label{align-items:flex-start;flex-direction:column}.parameter input[type=number]{width:100%}.parameter input[type=range]{min-width:0;max-width:100%}}
+/* Presentation revision: a quiet title screen and shared x-scales in the lab. */
+.home-page header{border:0;justify-content:flex-end}.home-page header .brand,.home-page nav{display:none}
+.home-page main{padding-top:0}.home-page .hero{min-height:70vh}.home-actions{display:flex;gap:14px;flex-wrap:wrap;margin-top:42px}
+.brand{letter-spacing:0;font-size:17px}.drive-toggle{display:flex;gap:12px;align-items:center;margin:18px 0}.drive-toggle input{width:22px;height:22px;accent-color:var(--mint)}
+.rotate-button{margin:14px 0 0;font-size:15px}.plots{align-content:start}.plot-panel canvas{height:300px}#trajectory{height:380px}
+.equation{font-size:clamp(20px,2.1vw,30px);padding:24px 20px;margin:20px 0;max-width:100%;overflow-x:auto}.equation math{font-family:"Cambria Math","STIX Two Math",math;font-size:1em;margin:0}
+.reading{min-width:0}.reading p{line-height:1.8}.home-actions .button{font-size:18px}.faculty-logo{display:block;width:190px;max-width:60%;height:auto;background:white;border-radius:8px;padding:8px;margin:30px 0}
+@media(max-width:900px){.controls .drive-toggle,.controls #thermalInfo,.controls #shapeInfo{grid-column:1/-1}.home-page .hero{min-height:auto;padding-top:35px}}
+@media(max-width:520px){.equation{padding:20px 10px}.home-actions{gap:10px;margin-top:28px}.home-actions .button{font-size:16px}.plot-panel canvas{height:275px}#trajectory{height:340px}}
