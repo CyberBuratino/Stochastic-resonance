@@ -9,7 +9,6 @@ const ru={
   "authors": "Авторы",
   "exit": "Выход",
   "title": "Стохастический<br>резонанс",
-  "experiment": "01 / ЧИСЛЕННЫЙ ЭКСПЕРИМЕНТ",
   "labTitle": "Тепловое движение в потенциале",
   "parameters": "Параметры системы",
   "driveToggle": "Периодическая сила",
@@ -28,8 +27,6 @@ const ru={
   "potential": "Частица в потенциале",
   "transitions": "Переходы",
   "trajectory": "Траектория и внешняя сила",
-  "theoryHeading": "ОТ НАБЛЮДЕНИЯ К МОДЕЛИ",
-  "project": "УЧЕБНЫЙ ПРОЕКТ",
   "authorName": "Капитонов Станислав · Корж Евгения",
   "authorDetails": "ВМК МГУ — факультет вычислительной математики и кибернетики.",
   "supervisor": "Преподаватель: Чичигина Ольга Александровна."
@@ -42,7 +39,6 @@ const en={
   "authors": "Authors",
   "exit": "Exit",
   "title": "Stochastic<br>resonance",
-  "experiment": "01 / NUMERICAL EXPERIMENT",
   "labTitle": "Thermal motion in a potential",
   "parameters": "System parameters",
   "driveToggle": "Periodic force",
@@ -61,8 +57,6 @@ const en={
   "potential": "Particle in the potential",
   "transitions": "Transitions",
   "trajectory": "Trajectory and driving force",
-  "theoryHeading": "FROM OBSERVATION TO MODEL",
-  "project": "STUDENT PROJECT",
   "authorName": "Stanislav Kapitonov · Evgeniya Korzh",
   "authorDetails": "CMC MSU — Faculty of Computational Mathematics and Cybernetics.",
   "supervisor": "Teacher: Olga Alexandrovna Chichigina."
@@ -73,7 +67,7 @@ function translate(){$('facultyLogo').alt=text('Логотип ВМК МГУ','C
 const labels={T:['Температура T','Temperature T'],a:['Коэффициент a','Coefficient a'],b:['Коэффициент b','Coefficient b'],f:['Амплитуда силы f','Force amplitude f'],omega:['Частота ω','Angular frequency ω'],gamma:['Трение γ','Damping γ']};
 function renderControls(){ $('parameters').innerHTML=''; for(const [k,[r,e]] of Object.entries(labels)){const [min,max]=Physics.limits[k], step=k==='omega'?.005:.01;const div=document.createElement('div');div.className='parameter';div.innerHTML=`<label for="n-${k}">${lang==='ru'?r:e}<input id="n-${k}" type="number" min="${min}" max="${max}" step="${step}" value="${p[k]}"></label><input id="r-${k}" type="range" aria-label="${lang==='ru'?r:e}" min="${min}" max="${max}" step="${step}" value="${p[k]}">`;$('parameters').append(div);['n-','r-'].forEach(prefix=>$(prefix+k).addEventListener('change',event=>{const v=event.target.valueAsNumber;if(!Number.isFinite(v)||v<min||v>max){noticeKey='invalid';updateNotice();renderControls();updatePhysicsInfo();return;}try{Physics.validate({...p,[k]:v});}catch(e){noticeKey='shape';updateNotice();renderControls();updatePhysicsInfo();return;}p[k]=v;reset();renderControls();updatePhysicsInfo();}));}}
 function updateNotice(){$('notice').textContent=noticeKey==='shape'?text('При a > 0 коэффициент b должен быть положительным. Для плоского потенциала сначала установите a = 0.','When a > 0, b must be positive. Set a = 0 first for a flat potential.'):noticeKey==='invalid'?text('Введите число в указанном диапазоне.','Enter a number within the allowed range.'):noticeKey==='exit'?text('Расчёт остановлен. Чтобы выйти, закройте вкладку браузера.','Simulation stopped. Close this browser tab to exit.'):noticeKey==='error'?text('Расчёт прерван из-за численной ошибки. Нажмите «Стоп».','Numerical error. Press Stop to reset.') :'';}
-function updateStatus(){$('status').textContent=running?text('● Расчёт идёт','● Running'):model.t?text('Ⅱ Пауза','Ⅱ Paused'):text('○ Готов к запуску','○ Ready');$('pause').disabled=!running;}
+function updateStatus(){$('status').textContent=running?text('Расчёт идёт','Running'):model.t?text('Пауза','Paused'):text('Готов к запуску','Ready');$('pause').disabled=!running;}
 function reset(){model=new Physics.Model(p);history=[{t:0,x:model.x,v:0,drive:0}];noticeKey='';updateStatus();updateNotice();updatePhysicsInfo();draw();}
 function route(){const hash=location.hash.slice(1),id=['home','lab','theory','authors'].includes(hash)?hash:'home';document.querySelectorAll('.page').forEach(e=>e.hidden=e.id!==id);document.querySelectorAll('nav a').forEach(e=>e.classList.toggle('active',e.hash==='#'+id));document.body.classList.toggle('home-page',id==='home');if(id!=='lab'){running=false;updateStatus();}draw();}
 $('language').onclick=()=>{lang=lang==='ru'?'en':'ru';translate();};
@@ -83,7 +77,7 @@ $('seed').onchange=()=>{const v=$('seed').valueAsNumber;if(!Number.isInteger(v)|
 document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{p.T=Number(b.dataset.preset);reset();renderControls();updatePhysicsInfo();});
 window.addEventListener('hashchange',route);window.addEventListener('resize',draw);
 // Canvas plots use CSS size and device pixel ratio; axes always carry numeric ticks.
-function chart(id,xmin,xmax,ymin,ymax,xlabel,ylabel,right,plotTop=28){const canvas=$(id),w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return null;const dpr=window.devicePixelRatio||1;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);const c=canvas.getContext('2d');c.scale(dpr,dpr);const left=58,top=plotTop,bottom=h-43,r=w-(right?65:22),X=x=>left+(x-xmin)/(xmax-xmin)*(r-left),Y=y=>bottom-(y-ymin)/(ymax-ymin)*(bottom-top);c.font='13px system-ui';c.lineWidth=1;for(let i=0;i<=4;i++){const x=xmin+(xmax-xmin)*i/4,y=ymin+(ymax-ymin)*i/4;c.strokeStyle='#293b4d';c.beginPath();c.moveTo(X(x),top);c.lineTo(X(x),bottom);c.moveTo(left,Y(y));c.lineTo(r,Y(y));c.stroke();c.fillStyle='#b2c4d4';c.textAlign='center';c.fillText(format(x),X(x),bottom+21);c.textAlign='right';c.fillText(format(y),left-9,Y(y)+4);if(right){c.textAlign='left';c.fillStyle='#ffb56b';c.fillText(format(right[0]+(right[1]-right[0])*i/4),r+9,Y(y)+4);}}c.fillStyle='#cbd9e5';c.textAlign='left';c.fillText(ylabel,4,17);c.textAlign='right';c.fillText(xlabel,r,h-3);if(right){c.fillStyle='#ffb56b';c.fillText('F [1]',w-3,17);}return {c,X,Y,left,top,right:r,bottom};}
+function chart(id,xmin,xmax,ymin,ymax,xlabel,ylabel,right,plotTop=28){const canvas=$(id),w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return null;const dpr=window.devicePixelRatio||1;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);const c=canvas.getContext('2d');c.scale(dpr,dpr);const left=58,top=plotTop,bottom=h-43,r=w-(right?65:22),X=x=>left+(x-xmin)/(xmax-xmin)*(r-left),Y=y=>bottom-(y-ymin)/(ymax-ymin)*(bottom-top);c.font='13px system-ui';c.lineWidth=1;for(let i=0;i<=4;i++){const x=xmin+(xmax-xmin)*i/4,y=ymin+(ymax-ymin)*i/4;c.strokeStyle='#dfe4e8';c.beginPath();c.moveTo(X(x),top);c.lineTo(X(x),bottom);c.moveTo(left,Y(y));c.lineTo(r,Y(y));c.stroke();c.fillStyle='#4b5563';c.textAlign='center';c.fillText(format(x),X(x),bottom+21);c.textAlign='right';c.fillText(format(y),left-9,Y(y)+4);if(right){c.textAlign='left';c.fillStyle='#a34d0a';c.fillText(format(right[0]+(right[1]-right[0])*i/4),r+9,Y(y)+4);}}c.fillStyle='#374151';c.textAlign='left';c.fillText(ylabel,4,17);c.textAlign='right';c.fillText(xlabel,r,h-3);if(right){c.fillStyle='#a34d0a';c.fillText('F [1]',w-3,17);}return {c,X,Y,left,top,right:r,bottom};}
 function format(n){return Math.abs(n)>=100?n.toFixed(0):Number(n.toFixed(2)).toString();}
 function line(g,points,color,width=2){const {c,X,Y}=g;c.save();c.beginPath();c.rect(g.left,g.top,g.right-g.left,g.bottom-g.top);c.clip();c.strokeStyle=color;c.lineWidth=width;c.beginPath();points.forEach(([x,y],i)=>i?c.lineTo(X(x),Y(y)):c.moveTo(X(x),Y(y)));c.stroke();c.restore();}
 function updatePhysicsInfo(){
@@ -111,25 +105,25 @@ function draw(){
   const high=Math.max(.5,Physics.barrier(p)*1.2,effective(model.x)+.3);
   let g=chart('potential',-extent,extent,low-.15*(high-low),high,'x [1]','Ueff [1]',null,65);
   if(g){
-    line(g,samples,'#49e2bc',3);
+    line(g,samples,'#245b86',3);
     const {c,X}=g,track=30;
-    c.strokeStyle='#9fb3c6';c.lineWidth=1.5;c.beginPath();c.moveTo(g.left,track);c.lineTo(g.right,track);c.stroke();
+    c.strokeStyle='#6b7280';c.lineWidth=1.5;c.beginPath();c.moveTo(g.left,track);c.lineTo(g.right,track);c.stroke();
     c.setLineDash([4,5]);c.beginPath();c.moveTo(X(model.x),track);c.lineTo(X(model.x),g.Y(effective(model.x)));c.stroke();c.setLineDash([]);
-    c.fillStyle='#ffb56b';c.beginPath();c.arc(X(model.x),track,8,0,2*Math.PI);c.fill();
+    c.fillStyle='#a34d0a';c.beginPath();c.arc(X(model.x),track,8,0,2*Math.PI);c.fill();
   }
   const windowSize=6*Math.PI/p.omega,start=Math.max(0,model.t-windowSize),end=Math.max(model.t,p.dt);
   const scaleF=Math.max(p.f,.01);
   if(vertical){
     g=chart('trajectory',-extent,extent,start,end,'x [1]','t [1]',null,65);
     if(g){
-      line(g,history.map(v=>[v.x,v.t]),'#49e2bc',2.5);
-      if(p.driveEnabled)line(g,history.map(v=>[v.drive/scaleF*extent,v.t]),'#ffb56b',2);
-      const {c,X}=g;c.fillStyle='#ffb56b';c.textAlign='right';c.fillText('F [1]',g.right,16);
+      line(g,history.map(v=>[v.x,v.t]),'#245b86',2.5);
+      if(p.driveEnabled)line(g,history.map(v=>[v.drive/scaleF*extent,v.t]),'#a34d0a',2);
+      const {c,X}=g;c.fillStyle='#a34d0a';c.textAlign='right';c.fillText('F [1]',g.right,16);
       for(let i=0;i<=4;i++){c.textAlign='center';c.fillText(format(-scaleF+2*scaleF*i/4),X(-extent+2*extent*i/4),45);}
     }
   }else{
     g=chart('trajectory',start,end,-extent,extent,'t [1]','x [1]',[-scaleF,scaleF]);
-    if(g){line(g,history.map(v=>[v.t,v.x]),'#49e2bc',2.5);if(p.driveEnabled)line(g,history.map(v=>[v.t,v.drive/scaleF*extent]),'#ffb56b',2);}
+    if(g){line(g,history.map(v=>[v.t,v.x]),'#245b86',2.5);if(p.driveEnabled)line(g,history.map(v=>[v.t,v.drive/scaleF*extent]),'#a34d0a',2);}
   }
   $('time').textContent=model.t.toFixed(1);$('position').textContent=model.x.toFixed(2);$('transitions').textContent=p.a>0?model.transitions:'—';
 }
