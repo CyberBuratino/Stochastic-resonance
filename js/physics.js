@@ -44,21 +44,6 @@
       return this;
     }
   }
-  function response(p, periods=16, burn=4) {
-    const model=new Model(p), period=2*Math.PI/model.p.omega;
-    const burnSteps=Math.round(burn*period/model.p.dt), n=Math.round(periods*period/model.p.dt);
-    for(let i=0;i<burnSteps;i++)model.step();
-    let sin=0,cos=0;
-    for(let i=0;i<n;i++){model.step();sin+=model.x*Math.sin(model.p.omega*model.t);cos+=model.x*Math.cos(model.p.omega*model.t);}
-    return {sin:2*sin/n,cos:2*cos/n};
-  }
-  function aggregate(samples) {
-    const n=samples.length, s=samples.reduce((a,b)=>a+b.sin,0)/n,c=samples.reduce((a,b)=>a+b.cos,0)/n;
-    const amplitude=Math.hypot(s,c);
-    // Delta-method standard error of the amplitude of the ensemble mean phasor.
-    const variance=n>1?samples.reduce((a,b)=>a+((b.sin-s)*(amplitude?s/amplitude:1)+(b.cos-c)*(amplitude?c/amplitude:0))**2,0)/(n-1):0;
-    return {amplitude,se:Math.sqrt(variance/n),n};
-  }
-  const api={defaults,limits,validate,Random,potential,drive,force,noiseIntensity,wellPosition,barrier,criticalForce,Model,response,aggregate};
+  const api={defaults,limits,validate,Random,potential,drive,force,noiseIntensity,wellPosition,barrier,criticalForce,Model};
   if(typeof module!=='undefined'&&module.exports)module.exports=api; else root.Physics=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

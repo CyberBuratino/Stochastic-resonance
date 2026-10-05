@@ -28,10 +28,6 @@ test('equilibrium kinetic temperature is T (independent of gamma) and converges 
   assert.ok(Math.abs(values[0]-values[1])<.02);
   const m=new P.Model({T:.4,gamma:2,f:0});let s=0,n=0;for(let i=0;i<500000;i++){m.step();if(m.t>500){s+=m.v*m.v;n++;}}assert.ok(Math.abs(s/n-.4)<.02);
 });
-test('default parameters demonstrate an interior response maximum',()=>{
-  const amplitudes=[0,.22,1.5].map(T=>P.aggregate(Array.from({length:6},(_,j)=>P.response({...P.defaults,T,seed:42+j*7919}))).amplitude);
-  assert.ok(amplitudes[1]>3*amplitudes[0]);assert.ok(amplitudes[1]>2*amplitudes[2]);
-});
 test('extreme UI parameters remain finite',()=>{
   for(const T of [0,1.5])for(const gamma of [.3,3]){const m=new P.Model({T,gamma,f:.5,omega:.2});for(let i=0;i<100000;i++)m.step();assert.ok(Number.isFinite(m.x)&&Number.isFinite(m.v));}
 });
