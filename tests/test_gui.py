@@ -91,6 +91,20 @@ class InterfaceTests(unittest.TestCase):
             self.assertEqual(box.current(), selected)
             self.assertNotEqual(app.sidebar.canvas.yview(), before)
 
+    def test_three_button_rows_fit_inside_sidebar(self):
+        app = self.app
+        for language in ("ru", "en"):
+            app.language = language
+            app._translate()
+            app.update()
+            left = app.sidebar.content.winfo_rootx()
+            right = left + app.sidebar.content.winfo_width()
+            for widget, key in app._text_bindings:
+                if key in ("low", "medium", "high", "start", "pause", "stop"):
+                    self.assertTrue(widget.winfo_ismapped(), key)
+                    self.assertGreaterEqual(widget.winfo_rootx(), left, key)
+                    self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(), right, key)
+
     def test_scheme_and_rotation_preserve_history(self):
         app = self.app
         app.advance_steps(2000)

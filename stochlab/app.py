@@ -79,12 +79,16 @@ class ScrollablePanel(ttk.Frame):
     def scroll_mouse(self, event):
         # У Tkinter событие колёсика зависит от ОС. Проверяем положение курсора:
         # над графиками или другими страницами боковая панель не прокручивается.
-        try:
-            under_pointer = self.winfo_containing(event.x_root, event.y_root)
-        except KeyError:
-            # Внутренний список раскрытого ttk.Combobox создан самим Tcl.
-            # У него нет Python-виджета; его прокруткой занимается Tk.
-            return None
+        target = getattr(event, "widget", None)
+        if target is not None and self.contains(target):
+            under_pointer = target
+        else:
+            try:
+                under_pointer = self.winfo_containing(event.x_root, event.y_root)
+            except KeyError:
+                # Внутренний список раскрытого ttk.Combobox создан самим Tcl.
+                # У него нет Python-виджета; его прокруткой занимается Tk.
+                return None
         if not self.contains(under_pointer):
             return None
         if getattr(event, "num", None) in (4, 5):
@@ -158,6 +162,8 @@ class Application(tk.Tk):
         style.configure("Title.TLabel", font=(visual.FONT_FAMILY, visual.TITLE_FONT_SIZE, "bold"))
         style.configure("Heading.TLabel", font=(visual.FONT_FAMILY, visual.HEADING_FONT_SIZE, "bold"))
         style.configure("TButton", padding=(9, 7), background=colors["button"])
+        style.configure("Compact.TButton", padding=(4, 7),
+                        font=(visual.FONT_FAMILY, visual.SMALL_FONT_SIZE))
         style.configure("Panel.TCheckbutton", background=colors["panel"])
         style.map("TButton", background=[("active", "#e6edf4")])
         style.configure("TEntry", fieldbackground="white")
@@ -258,7 +264,8 @@ class Application(tk.Tk):
         presets = ttk.Frame(controls, style="Panel.TFrame")
         presets.pack(fill="x", pady=(0, 14))
         for key, value in (("low", .025), ("medium", .22), ("high", 1.1)):
-            self._button(presets, key, lambda temperature=value: self.set_temperature(temperature)).pack(side="left", expand=True, fill="x")
+            self._button(presets, key, lambda temperature=value: self.set_temperature(temperature),
+                         width=1, style="Compact.TButton").pack(side="left", expand=True, fill="x")
         self._label(controls, "appearance", style="Panel.TLabel").pack(anchor="w")
         self.scheme_box = ttk.Combobox(controls, state="readonly")
         self.scheme_box.pack(fill="x", pady=(4, 14))
@@ -275,7 +282,7 @@ class Application(tk.Tk):
         transport = ttk.Frame(controls, style="Panel.TFrame")
         transport.pack(fill="x", pady=(0, 12))
         for key, command in (("start", self.start), ("pause", self.pause), ("stop", self.stop)):
-            button = self._button(transport, key, command)
+            button = self._button(transport, key, command, width=1)
             button.pack(side="left", expand=True, fill="x")
             if key == "pause":
                 self.pause_button = button
