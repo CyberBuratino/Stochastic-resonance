@@ -91,6 +91,22 @@ class InterfaceTests(unittest.TestCase):
             self.assertEqual(box.current(), selected)
             self.assertNotEqual(app.sidebar.canvas.yview(), before)
 
+    def test_graph_frames_reuse_one_canvas_item_and_export_vector_svg(self):
+        app = self.app
+        app._draw()
+        items = [canvas.find_all() for canvas in (app.potential_canvas, app.trajectory_canvas)]
+        self.assertTrue(all(len(ids) == 1 for ids in items))
+        app.advance_steps(25)
+        app._draw()
+        self.assertEqual(items, [canvas.find_all() for canvas in (app.potential_canvas, app.trajectory_canvas)])
+        for canvas in (app.potential_canvas, app.trajectory_canvas):
+            self.assertEqual(canvas.type(canvas.find_all()[0]), "image")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "graphs.svg"
+            app.save_svg(path)
+            self.assertNotIn("<image", path.read_text())
+            self.assertIn("polyline", path.read_text())
+
     def test_three_button_rows_fit_inside_sidebar(self):
         app = self.app
         for language in ("ru", "en"):

@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from . import appearance as visual
 from .model import (Model, Parameters, PARAMETER_LIMITS, barrier_height,
                     critical_force, noise_intensity)
-from .plotting import potential_scene, title_scene, trajectory_scene
+from .plotting import ViewLimits, potential_scene, title_scene, trajectory_scene
 from .texts import EN, RU, THEORY_EN, THEORY_RU
 
 
@@ -113,6 +113,7 @@ class Application(tk.Tk):
         self.current_page = "home"
         self.parameters = Parameters()
         self.model = Model(self.parameters)
+        self.view_limits = ViewLimits()
         self.history = deque([self.model.sample()])
         self.speed = "slow"
         self._last_clock = time.monotonic()
@@ -464,6 +465,7 @@ class Application(tk.Tk):
 
     def reset_model(self):
         self.model = Model(self.parameters)
+        self.view_limits = ViewLimits()
         self.history = deque([self.model.sample()])
         self._fractional_steps = 0.0
         self.notice_label.configure(text="")
@@ -539,14 +541,15 @@ class Application(tk.Tk):
             visible = list(self.history)
             if not visible or visible[-1].t != self.model.t:
                 visible.append(self.model.sample())
+            self.view_limits.update(self.parameters, visible, self.model.x)
             self._scenes = [
                 potential_scene(self.parameters, self.model.t, self.model.x, visible,
                                 max(300, self.potential_canvas.winfo_width()),
-                                max(140, self.potential_canvas.winfo_height()), self.scheme, self.language),
+                                max(140, self.potential_canvas.winfo_height()), self.scheme, self.language, self.view_limits),
                 trajectory_scene(self.parameters, self.model.t, visible,
                                  max(300, self.trajectory_canvas.winfo_width()),
                                  max(180, self.trajectory_canvas.winfo_height()), self.scheme,
-                                 self.vertical, self.language),
+                                 self.vertical, self.language, self.view_limits),
             ]
             for scene, canvas in zip(self._scenes, (self.potential_canvas, self.trajectory_canvas)):
                 scene.draw(canvas)

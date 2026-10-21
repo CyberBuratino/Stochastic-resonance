@@ -1,12 +1,11 @@
 """Проверки экспортируемого рисунка без графического дисплея."""
 
 import unittest
-from types import SimpleNamespace
 from xml.etree import ElementTree
 
 from stochlab.model import Parameters, Sample, Model
 from stochlab.plotting import (
-    Scene, _display_samples, potential_scene, trajectory_scene, title_scene,
+    Scene, ViewLimits, potential_scene, trajectory_scene, title_scene,
 )
 
 
@@ -67,18 +66,39 @@ class PlotTests(unittest.TestCase):
                 self.assertTrue(all(math.isfinite(value) for value in item.coordinates))
             ElementTree.fromstring(svg)
 
-    def test_display_downsampling_preserves_extrema_and_zero_crossings(self):
-        samples = [SimpleNamespace(t=i, x=(-1 if i < 2500 else 1)) for i in range(5000)]
-        samples[1000].x = -10
-        samples[4000].x = 12
-        selected = _display_samples(samples)
-        self.assertLessEqual(len(selected), 1200)
-        self.assertEqual(selected[0], samples[0])
-        self.assertEqual(selected[-1], samples[-1])
-        self.assertIn(samples[2499], selected)
-        self.assertIn(samples[2500], selected)
-        self.assertIn(samples[1000], selected)
-        self.assertIn(samples[4000], selected)
+    def test_all_saved_trajectory_points_are_retained(self):
+        parameters = Parameters(omega=.02, drive_enabled=False)
+        samples = [Sample(i*.1, -1 if i < 2500 else 1, 0, 0) for i in range(5000)]
+        scene = trajectory_scene(parameters, samples[-1].t, samples, 700, 320, 'quantities')
+        coordinates = [item for item in scene.primitives if item.kind == 'line' and item.color == '#245b86']
+        self.assertEqual(len(coordinates), 1)
+        self.assertEqual(len(coordinates[0].coordinates), len(samples)*2)
+
+    def test_force_is_smooth_and_independent_of_trajectory_sampling(self):
+        import math
+        period = 2*math.pi/self.parameters.omega
+        samples = [Sample(0, -1, 0, 999), Sample(period, -1, 0, 999)]
+        scene = trajectory_scene(self.parameters, period, samples, 700, 320, 'quantities', False)
+        force = [item for item in scene.primitives if item.kind == 'line' and item.color == '#a34d0a']
+        self.assertEqual(len(force), 1)
+        self.assertGreater(len(force[0].coordinates), 400)
+        ys = force[0].coordinates[1::2]
+        self.assertGreater(max(ys)-min(ys), 100)
+
+    def test_view_limits_only_expand_during_a_realization(self):
+        limits = ViewLimits()
+        limits.update(self.parameters, self.samples, -1.4)
+        original = limits.extent, limits.energy_min, limits.energy_max
+        for x in [-1.3, -1, 0, 1, 1.4]:
+            limits.update(self.parameters, self.samples, x)
+            self.assertEqual(original, (limits.extent, limits.energy_min, limits.energy_max))
+        limits.update(self.parameters, [Sample(0, 5, 0, 0)], 5)
+        expanded = limits.extent, limits.energy_min, limits.energy_max
+        self.assertGreater(expanded[0], original[0])
+        self.assertGreater(expanded[2], original[2])
+        limits.update(self.parameters, self.samples, -1)
+        self.assertEqual(expanded, (limits.extent, limits.energy_min, limits.energy_max))
+
 
 
 if __name__ == '__main__':

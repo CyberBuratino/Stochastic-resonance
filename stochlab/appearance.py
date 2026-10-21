@@ -29,12 +29,12 @@ UI_COLORS = {
 
 # Размеры графиков. У обеих картинок одинаковые левые/правые поля:
 # поэтому координата x на вертикальной траектории совпадает с потенциалом.
-PLOT_FONT_SIZE = 12
+PLOT_FONT_SIZE = 13
 PLOT_LEFT_MARGIN = 68
 PLOT_RIGHT_MARGIN = 28
 PLOT_BOTTOM_MARGIN = 44
 PLOT_TOP_MARGIN = 60
-PLOT_LINE_WIDTH = 2.5
+PLOT_LINE_WIDTH = 2.0
 FORCE_LINE_WIDTH = 2.0
 PARTICLE_RADIUS = 7
 GRID_LINE_WIDTH = 1
@@ -92,3 +92,8 @@ SCHEME_LABELS = {
 def get_scheme(scheme: str | ColorScheme) -> ColorScheme:
     """Возвращает палитру по имени; готовую палитру можно передать напрямую."""
     return SCHEMES[scheme] if isinstance(scheme, str) else scheme
+
+# Графики рисуются в увеличенном буфере и уменьшаются с качественным фильтром.
+# Это сглаживает пиксельные края, но не усредняет физическую траекторию.
+GRAPH_SUPERSAMPLING = 2
+GRAPH_FONT_FILE = "assets/fonts/DejaVuSans.ttf"

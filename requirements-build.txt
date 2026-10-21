@@ -1,2 +1,3 @@
+-r requirements.txt
 # Needed only to create a standalone executable, not to run the source app.
 PyInstaller==6.16.0

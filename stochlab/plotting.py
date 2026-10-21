@@ -1,4 +1,4 @@
-"""Рисование и SVG-экспорт без внешних библиотек.
+"""Описание графиков и векторный SVG-экспорт.
 
 Функции этого файла только читают параметры и готовую траекторию. Они создают
 список простых фигур (Scene), который можно показать на tkinter.Canvas или
@@ -52,24 +52,9 @@ class Scene:
         self.primitives.append(Primitive("circle", (x, y, radius), color, fill=color))
 
     def draw(self, canvas):
-        """Перерисовывает существующий Canvas. Его положение не меняется."""
-        canvas.delete("all")
-        canvas.configure(background=self.background, highlightthickness=0)
-        for item in self.primitives:
-            if item.kind == "line":
-                options = {"fill": item.color, "width": item.width}
-                if item.dash:
-                    options["dash"] = item.dash
-                canvas.create_line(*item.coordinates, **options)
-            elif item.kind == "circle":
-                x, y, radius = item.coordinates
-                canvas.create_oval(x-radius, y-radius, x+radius, y+radius,
-                                   fill=item.fill, outline=item.color)
-            elif item.kind == "text":
-                canvas.create_text(
-                    *item.coordinates, text=item.text, fill=item.color,
-                    font=(FONT_FAMILY, -item.font_size), anchor=item.anchor,
-                )
+        """Показывает сглаженный кадр, не пересоздавая элементы Canvas."""
+        from .rendering import draw_scene
+        draw_scene(self, canvas)
 
     def to_svg(self):
         """Возвращает самостоятельный векторный SVG в UTF-8."""
@@ -94,7 +79,7 @@ class Scene:
                 if item.dash:
                     dash = f' stroke-dasharray="{",".join(map(str, item.dash))}"'
                 lines.append(f'<polyline points="{points}" fill="none" stroke="{color}" '
-                             f'stroke-width="{number(item.width)}"{dash}/>')
+                             f'stroke-width="{number(item.width)}" stroke-linejoin="round" stroke-linecap="round"{dash}/>')
             elif item.kind == "circle":
                 x, y, radius = item.coordinates
                 lines.append(f'<circle cx="{number(x)}" cy="{number(y)}" r="{number(radius)}" '
@@ -243,6 +228,43 @@ def _horizontal_extent(parameters, history, position=0):
                max(positions, default=0)*1.12)
 
 
+@dataclass
+class ViewLimits:
+    """Масштаб одной реализации: расширяется при необходимости, не дрожит.
+
+    Границы не следуют за каждым тепловым колебанием. При сбросе модели
+    создаётся новый экземпляр; физические координаты при этом не изменяются.
+    """
+    extent: float = 0.0
+    energy_min: float = 0.0
+    energy_max: float = 0.0
+    initialized: bool = False
+
+    def update(self, parameters, history, position):
+        required = _horizontal_extent(parameters, history, position)
+        if not self.initialized:
+            self.extent = math.ceil(required * 2) / 2
+        elif required > self.extent:
+            self.extent = math.ceil(required * 1.1 * 2) / 2
+        amplitude = parameters.f if parameters.drive_enabled else 0
+        # Нижняя оценка по всем фазам наклона, а не только текущей фазе.
+        xs = [-self.extent + 2*self.extent*i/512 for i in range(513)]
+        lowest = min(-.1, *(potential(x, parameters)-abs(x)*amplitude for x in xs))
+        highest = max(.5, barrier_height(parameters)*1.2,
+                      potential(position, parameters)+abs(position)*amplitude+.3)
+        lowest -= .15*(highest-lowest)
+        span = highest-lowest
+        step = 10 ** math.floor(math.log10(max(span, .01))) / 5
+        lower = math.floor(lowest/step+1e-12)*step
+        upper = math.ceil(highest/step-1e-12)*step
+        if not self.initialized:
+            self.energy_min, self.energy_max = lower, upper
+            self.initialized = True
+        else:
+            self.energy_min = min(self.energy_min, lower)
+            self.energy_max = max(self.energy_max, upper)
+
+
 def _legend(scene, palette, language, y=12):
     if palette.by_state:
         left = "x < 0" if language == "en" else "x < 0"
@@ -251,21 +273,25 @@ def _legend(scene, palette, language, y=12):
         scene.text(scene.width/2+45, y, right, palette.right_well, anchor="n")
 
 
-def potential_scene(parameters, time, position, history, width, height, scheme, language="ru"):
+def potential_scene(parameters, time, position, history, width, height, scheme, language="ru", view_limits=None):
     """Мгновенный потенциал и частица на горизонтальной дорожке над ним."""
     palette = get_scheme(scheme)
     scene = Scene(max(width, 220), max(height, 160), palette.background)
-    extent = _horizontal_extent(parameters, history, position)
+    extent = view_limits.extent if view_limits else _horizontal_extent(parameters, history, position)
     drive = driving_force(time, parameters)
 
     def energy(x):
         return potential(x, parameters)-x*drive
 
-    points = [(-extent+2*extent*index/300, 0) for index in range(301)]
+    # Кривая известна аналитически: плотность точек соответствует экрану.
+    count = max(300, math.ceil(scene.width * 2))
+    points = [(-extent+2*extent*index/count, 0) for index in range(count+1)]
     points = [(x, energy(x)) for x, _ in points]
     lowest = min(-.1, *(point[1] for point in points))
     highest = max(.5, barrier_height(parameters)*1.2, energy(position)+.3)
     lowest -= .15*(highest-lowest)
+    if view_limits:
+        lowest, highest = view_limits.energy_min, view_limits.energy_max
     axes = _axes(scene, -extent, extent, lowest, highest, "x [1]", "Ueff [1]", palette, top=66)
     _state_curve(scene, axes, points, [point[0] for point in points], palette)
     track = 33
@@ -280,45 +306,24 @@ def potential_scene(parameters, time, position, history, width, height, scheme, 
     return scene
 
 
-def _display_samples(samples, limit=1200):
-    """Прореживает только рисунок; исходная история/экспорт CSV не меняются.
-
-    В каждом временном блоке оставляем минимальную и максимальную координату,
-    чтобы узкие выбросы не пропали. Точки по обе стороны x=0 сохраняем отдельно:
-    цветовые переключения не исчезают при уменьшении количества точек.
-    """
-    if len(samples) <= limit:
-        return samples
-    selected = {0, len(samples)-1}
-    for index in range(1, len(samples)):
-        if (samples[index-1].x >= 0) != (samples[index].x >= 0):
-            selected.update((index-1, index))
-    # В необычной траектории с очень частыми пересечениями нуля сохраняем их
-    # все: точность цветов в этом случае важнее рекомендуемого лимита рисунка.
-    buckets = max(0, (limit-len(selected))//2)
-    for bucket in range(buckets):
-        start = bucket*len(samples)//buckets
-        end = (bucket+1)*len(samples)//buckets
-        indices = range(start, end)
-        selected.add(min(indices, key=lambda index: samples[index].x))
-        selected.add(max(indices, key=lambda index: samples[index].x))
-    return [samples[index] for index in sorted(selected)]
-
-
-def trajectory_scene(parameters, time, history, width, height, scheme, vertical=True, language="ru"):
+def trajectory_scene(parameters, time, history, width, height, scheme, vertical=True, language="ru", view_limits=None):
     """Координата и сила; время направлено вверх либо вправо."""
     palette = get_scheme(scheme)
     scene = Scene(max(width, 220), max(height, 170), palette.background)
-    extent = _horizontal_extent(parameters, history)
+    extent = view_limits.extent if view_limits else _horizontal_extent(parameters, history)
     period = 2*math.pi/parameters.omega
     start = max(0, time-3*period)
     end = max(time, parameters.dt)
-    samples = _display_samples([sample for sample in history if start <= sample.t <= end])
+    # Каждая сохранённая точка участвует в рисунке. Добавление новых точек
+    # больше не меняет выбор старых точек и не создаёт рябь от прореживания.
+    samples = [sample for sample in history if start <= sample.t <= end]
+    count = max(200, math.ceil((height if vertical else width) * 2))
+    force_times = [start+(end-start)*i/count for i in range(count+1)]
     force_extent = max(parameters.f, .01)
     if vertical:
         axes = _axes(scene, -extent, extent, start, end, "x [1]", "t [1]", palette, top=66)
         coordinate_points = [(sample.x, sample.t) for sample in samples]
-        force_points = [(sample.force/force_extent*extent, sample.t) for sample in samples]
+        force_points = [(driving_force(t, parameters)/force_extent*extent, t) for t in force_times]
         scene.text(scene.width-5, 12, "F [1]", palette.force, anchor="ne")
         for index in range(5):
             fraction = index/4
@@ -328,7 +333,7 @@ def trajectory_scene(parameters, time, history, width, height, scheme, vertical=
         axes = _axes(scene, start, end, -extent, extent, "t [1]", "x [1]", palette,
                      secondary=(-force_extent, force_extent))
         coordinate_points = [(sample.t, sample.x) for sample in samples]
-        force_points = [(sample.t, sample.force/force_extent*extent) for sample in samples]
+        force_points = [(t, driving_force(t, parameters)/force_extent*extent) for t in force_times]
     _state_curve(scene, axes, coordinate_points, [sample.x for sample in samples], palette)
     if parameters.drive_enabled:
         _curve(scene, axes, force_points, palette.force, FORCE_LINE_WIDTH, palette.force_dash)
