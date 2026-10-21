@@ -79,7 +79,12 @@ class ScrollablePanel(ttk.Frame):
     def scroll_mouse(self, event):
         # У Tkinter событие колёсика зависит от ОС. Проверяем положение курсора:
         # над графиками или другими страницами боковая панель не прокручивается.
-        under_pointer = self.winfo_containing(event.x_root, event.y_root)
+        try:
+            under_pointer = self.winfo_containing(event.x_root, event.y_root)
+        except KeyError:
+            # Внутренний список раскрытого ttk.Combobox создан самим Tcl.
+            # У него нет Python-виджета; его прокруткой занимается Tk.
+            return None
         if not self.contains(under_pointer):
             return None
         if getattr(event, "num", None) in (4, 5):
@@ -262,6 +267,11 @@ class Application(tk.Tk):
         self.speed_box = ttk.Combobox(controls, state="readonly")
         self.speed_box.pack(fill="x", pady=(4, 12))
         self.speed_box.bind("<<ComboboxSelected>>", self._speed_selected)
+        # Перехватываем колёсико до стандартного обработчика Combobox:
+        # прокрутка панели не должна незаметно менять цвет или скорость.
+        for box in (self.scheme_box, self.speed_box):
+            for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+                box.bind(sequence, self.sidebar.scroll_mouse)
         transport = ttk.Frame(controls, style="Panel.TFrame")
         transport.pack(fill="x", pady=(0, 12))
         for key, command in (("start", self.start), ("pause", self.pause), ("stop", self.stop)):

@@ -77,6 +77,20 @@ class InterfaceTests(unittest.TestCase):
         app.sidebar.scroll_mouse(event)
         self.assertEqual(before, panel.yview())
 
+    def test_wheel_over_closed_menu_scrolls_without_changing_choice(self):
+        app = self.app
+        for box in (app.scheme_box, app.speed_box):
+            box.focus_force()
+            app.sidebar.reveal_focus(SimpleNamespace(widget=box))
+            app.update()
+            selected = box.current()
+            before = app.sidebar.canvas.yview()
+            box.event_generate("<MouseWheel>", delta=120, x=5, y=5,
+                               rootx=box.winfo_rootx()+5, rooty=box.winfo_rooty()+5)
+            app.update()
+            self.assertEqual(box.current(), selected)
+            self.assertNotEqual(app.sidebar.canvas.yview(), before)
+
     def test_scheme_and_rotation_preserve_history(self):
         app = self.app
         app.advance_steps(2000)
