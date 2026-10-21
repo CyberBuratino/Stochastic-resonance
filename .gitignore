@@ -1,4 +1,16 @@
-node_modules/
-test-results/
+# Python-generated files
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Standalone application build
+build/
+dist/
 *.zip
+
+# Local tooling / operating system
+.pytest_cache/
+.coverage
 .DS_Store
+Thumbs.db

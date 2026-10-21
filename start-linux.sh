@@ -1,4 +1,10 @@
 #!/bin/sh
-# Open in the system browser. No server or language runtime is needed.
+# Run the portable build when available; otherwise run the editable source.
 cd -- "$(dirname -- "$0")" || exit 1
-exec xdg-open "$PWD/index.html"
+if [ -x "./StochasticResonance" ]; then
+    exec ./StochasticResonance
+fi
+if [ -x "./dist/StochasticResonance/StochasticResonance" ]; then
+    exec ./dist/StochasticResonance/StochasticResonance
+fi
+exec python3 main.py
