@@ -8,8 +8,12 @@ analysis = Analysis(
     [str(project_root / "main.py")],
     pathex=[str(project_root)],
     binaries=[],
-    datas=[(str(project_root / "assets" / "vmk-logo.png"), "assets")],
-    hiddenimports=[],
+    datas=[
+        (str(project_root / "assets" / "vmk-logo.png"), "assets"),
+        (str(project_root / "assets" / "fonts"), "assets/fonts"),
+    ],
+    # Pillow подключает мост к Tk динамически при первом кадре.
+    hiddenimports=["PIL._tkinter_finder", "PIL._imagingtk"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

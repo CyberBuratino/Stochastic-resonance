@@ -19,9 +19,10 @@
 
 ## Запуск исходников
 
-Нужен Python 3.11 или новее с Tkinter. Сторонних библиотек для приложения нет:
+Нужен Python 3.11 или новее с Tkinter. Для сглаживания графиков используется Pillow; установите зависимость перед запуском исходников:
 
 ```sh
+python -m pip install -r requirements.txt
 python main.py
 ```
 
@@ -43,6 +44,12 @@ Windows: можно воспользоваться `start-windows.bat`; Linux: `
 
 Исходные настройки: a=1, b=0,5, T=0,22, f=0,18, ω=0,04, γ=1, seed=42. Силу можно выключить отдельным переключателем, сохранив амплитуду, или поставить f=0. При a=0, b>0 остаётся одна яма; при a=b=0 — плоский потенциал. Для плоского случая сначала установите a=0. Комбинация a>0, b=0 запрещена: потенциал не ограничен снизу.
 
+## Качество графиков
+
+Экранные графики рисуются в увеличенном разрешении и уменьшаются фильтром Lanczos. Целый кадр заменяет предыдущий без очистки Canvas. Это сглаживает края линий и надписей, а не физические колебания частицы. Все сохранённые точки траектории остаются на графике; известная периодическая сила строится независимо по формуле. Масштаб координаты и энергии во время реализации только расширяется, если данные выходят за границы, и сбрасывается кнопкой «Стоп» или изменением параметров.
+
+В `appearance.py` параметр `GRAPH_SUPERSAMPLING` задаёт качество: 2 — стандартное сглаживание с умеренной нагрузкой; 3 повышает качество ценой времени отрисовки. SVG остаётся векторным. Шрифт с кириллицей включён в проект и готовые сборки. Пользователю готового приложения не нужно устанавливать Pillow или шрифт.
+
 ## Как устроен код
 
 | Файл | Назначение |
@@ -50,7 +57,8 @@ Windows: можно воспользоваться `start-windows.bat`; Linux: `
 | `main.py` | Запуск приложения и проверка готовой сборки |
 | `stochlab/app.py` | Окна, кнопки, панель параметров и действия пользователя |
 | `stochlab/appearance.py` | Цвета, размеры и оформление, которые удобно менять |
-| `stochlab/plotting.py` | Рисование графиков и сохранение SVG |
+| `stochlab/plotting.py` | Геометрия графиков и векторный SVG |
+| `stochlab/rendering.py` | Сглаживание и буфер экранного кадра |
 | `stochlab/texts.py` | Русские и английские надписи и теория |
 | `stochlab/model.py` | Физическая модель и интегратор; для изменения оформления этот файл не нужен |
 | `assets/vmk-logo.png` | Логотип ВМК |
@@ -90,7 +98,7 @@ python -m PyInstaller --clean --noconfirm stochastic_resonance.spec
 
 Результат — `dist/StochasticResonance/`. Для Windows сборку нужно выполнять на Windows, для Linux — на Linux. PyInstaller нужен только разработчику во время упаковки. Файл `requirements-build.txt` фиксирует версию упаковщика; приложение не импортирует его при работе.
 
-GitHub Actions выполняет тесты, собирает обе версии и проверяет запуск упакованного приложения с `--smoke-test`. Состояние фактических проверок следует смотреть в соответствующем запуске Actions и [docs/VALIDATION.md](docs/VALIDATION.md).
+GitHub Actions выполняет тесты, собирает обе версии и проверяет запуск упакованного приложения с `--smoke-test` и открытие обоих графиков с `--smoke-test-gui`. Состояние фактических проверок следует смотреть в соответствующем запуске Actions и [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Перед показом
 
@@ -104,4 +112,4 @@ GitHub Actions выполняет тесты, собирает обе верси
 
 ## English quick start
 
-Download a successful GitHub Actions artifact for Windows or Linux, extract the **entire folder**, and run `StochasticResonance.exe` or `StochasticResonance`. The packaged app includes Python and Tk and works offline. For source editing, use Python 3.11+ with Tkinter and run `python main.py`. The parameter sidebar scrolls independently, while the plots remain visible. Choose quantity-based, state-based or monochrome colors; export SVG for citation and CSV for trajectory data. Visual settings are in `stochlab/appearance.py`; the physical model is separate in `stochlab/model.py`.
+Download a successful GitHub Actions artifact for Windows or Linux, extract the **entire folder**, and run `StochasticResonance.exe` or `StochasticResonance`. The packaged app includes Python and Tk and works offline. For source editing, use Python 3.11+ with Tkinter, install `python -m pip install -r requirements.txt`, then run `python main.py`. The parameter sidebar scrolls independently, while the plots remain visible. Choose quantity-based, state-based or monochrome colors; export SVG for citation and CSV for trajectory data. Visual settings are in `stochlab/appearance.py`; the physical model is separate in `stochlab/model.py`.
