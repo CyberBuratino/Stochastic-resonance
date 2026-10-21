@@ -1,0 +1,61 @@
+name: Python application
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    name: Test and package (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: Windows
+          - os: ubuntu-22.04
+            platform: Linux
+    env:
+      STOCHLAB_GUI_TESTS: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Linux display and Tk support
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-tk
+      - name: Install packaging tool
+        run: python -m pip install -r requirements-build.txt
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        run: python -m unittest discover -s tests -v
+      - name: Test (Linux virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m unittest discover -s tests -v
+      - name: Package standalone application
+        run: python -m PyInstaller --clean --noconfirm stochastic_resonance.spec
+      - name: Check packaged application
+        shell: python
+        run: |
+          import os
+          import subprocess
+          from pathlib import Path
+          executable_name = "StochasticResonance.exe" if os.name == "nt" else "StochasticResonance"
+          executable = Path("dist") / "StochasticResonance" / executable_name
+          subprocess.run([str(executable.resolve()), "--smoke-test"], check=True, timeout=30)
+      - name: Upload portable application folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: StochasticResonance-${{ matrix.platform }}
+          path: dist/StochasticResonance/
+          if-no-files-found: error
+          retention-days: 30
