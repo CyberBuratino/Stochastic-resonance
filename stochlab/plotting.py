@@ -1,12 +1,11 @@
-"""Описание графиков и векторный SVG-экспорт.
+"""Описание геометрии графиков.
 
 Функции этого файла только читают параметры и готовую траекторию. Они создают
-список простых фигур (Scene), который можно показать на tkinter.Canvas или
-сохранить в SVG. Поэтому экспорт точно сохраняет цвета и пунктир текущего вида.
+список простых фигур (Scene), который выводится на tkinter.Canvas.
+Здесь меняется только рисунок, а не физическая траектория.
 """
 
 from dataclasses import dataclass, field
-from html import escape
 import math
 
 from .appearance import (
@@ -56,46 +55,6 @@ class Scene:
         from .rendering import draw_scene
         draw_scene(self, canvas)
 
-    def to_svg(self):
-        """Возвращает самостоятельный векторный SVG в UTF-8."""
-        def number(value):
-            return f"{value:.3f}".rstrip("0").rstrip(".") or "0"
-
-        lines = [
-            '<?xml version="1.0" encoding="UTF-8"?>',
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{number(self.width)}" '
-            f'height="{number(self.height)}" viewBox="0 0 {number(self.width)} {number(self.height)}">',
-            f'<rect width="100%" height="100%" fill="{escape(self.background, quote=True)}"/>',
-        ]
-        for item in self.primitives:
-            color = escape(item.color, quote=True)
-            if item.kind == "line":
-                coordinates = item.coordinates
-                points = " ".join(
-                    f"{number(coordinates[i])},{number(coordinates[i+1])}"
-                    for i in range(0, len(coordinates), 2)
-                )
-                dash = ""
-                if item.dash:
-                    dash = f' stroke-dasharray="{",".join(map(str, item.dash))}"'
-                lines.append(f'<polyline points="{points}" fill="none" stroke="{color}" '
-                             f'stroke-width="{number(item.width)}" stroke-linejoin="round" stroke-linecap="round"{dash}/>')
-            elif item.kind == "circle":
-                x, y, radius = item.coordinates
-                lines.append(f'<circle cx="{number(x)}" cy="{number(y)}" r="{number(radius)}" '
-                             f'fill="{color}"/>')
-            elif item.kind == "text":
-                x, y = item.coordinates
-                horizontal = "start" if item.anchor in ("w", "nw", "sw") else "end" if item.anchor in ("e", "ne", "se") else "middle"
-                vertical = "hanging" if item.anchor in ("n", "nw", "ne") else "auto" if item.anchor in ("s", "sw", "se") else "central"
-                lines.append(
-                    f'<text x="{number(x)}" y="{number(y)}" fill="{color}" '
-                    f'font-family="{escape(FONT_FAMILY, quote=True)}" font-size="{item.font_size}" '
-                    f'text-anchor="{horizontal}" dominant-baseline="{vertical}">{escape(item.text)}</text>'
-                )
-        lines.append("</svg>")
-        return "\n".join(lines)
-
 
 @dataclass(frozen=True)
 class Axes:
@@ -129,28 +88,58 @@ def _format_tick(value):
     return f"{value:.2f}".rstrip("0").rstrip(".")
 
 
-def _axes(scene, xmin, xmax, ymin, ymax, xlabel, ylabel, palette, top=PLOT_TOP_MARGIN, secondary=None):
+def _time_step(span):
+    """Удобный постоянный интервал делений для фиксированной ширины окна."""
+    desired = span/4
+    power = 10 ** math.floor(math.log10(desired))
+    fraction = desired/power
+    multiplier = 1 if fraction < 1.5 else 2 if fraction < 3 else 5 if fraction < 7 else 10
+    return multiplier*power
+
+
+def _time_ticks(low, high, step):
+    # До t=0 вычислений нет: пустая предыстория не получает вымышленных меток.
+    first = max(0, math.ceil((low-1e-10)/step))
+    last = math.floor((high+1e-10)/step)
+    return [index*step for index in range(first, last+1)]
+
+
+def _axes(scene, xmin, xmax, ymin, ymax, xlabel, ylabel, palette,
+          top=PLOT_TOP_MARGIN, secondary=None, time_axis=None):
     left = min(PLOT_LEFT_MARGIN, scene.width * .22)
     right_margin = PLOT_RIGHT_MARGIN + (36 if secondary else 0)
     axes = Axes(left, max(left+40, scene.width-right_margin), top,
                 max(top+25, scene.height-PLOT_BOTTOM_MARGIN), xmin, xmax, ymin, ymax)
-    for index in range(5):
-        fraction = index/4
-        x = xmin+(xmax-xmin)*fraction
-        y = ymin+(ymax-ymin)*fraction
+    xs = ([xmin+(xmax-xmin)*i/4 for i in range(5)] if time_axis != "x"
+          else _time_ticks(xmin, xmax, _time_step(xmax-xmin)))
+    ys = ([ymin+(ymax-ymin)*i/4 for i in range(5)] if time_axis != "y"
+          else _time_ticks(ymin, ymax, _time_step(ymax-ymin)))
+    for x in xs:
         scene.line((axes.x(x), axes.top, axes.x(x), axes.bottom), palette.grid, GRID_LINE_WIDTH)
-        scene.line((axes.left, axes.y(y), axes.right, axes.y(y)), palette.grid, GRID_LINE_WIDTH)
         scene.text(axes.x(x), axes.bottom+19, _format_tick(x), palette.text)
+    for y in ys:
+        scene.line((axes.left, axes.y(y), axes.right, axes.y(y)), palette.grid, GRID_LINE_WIDTH)
         scene.text(axes.left-9, axes.y(y), _format_tick(y), palette.text, anchor="e")
         if secondary:
             low, high = secondary
+            fraction = (y-ymin)/(ymax-ymin)
             scene.text(axes.right+8, axes.y(y), _format_tick(low+(high-low)*fraction),
                        palette.force, anchor="w")
     scene.text(8, 12, ylabel, palette.text, anchor="nw")
     scene.text(axes.right, scene.height-3, xlabel, palette.text, anchor="se")
     if secondary:
-        scene.text(scene.width-5, 12, "F [1]", palette.force, anchor="ne")
+        scene.text(scene.width-5, 12, "F", palette.force, anchor="ne")
     return axes
+
+
+def _time_window(parameters, time):
+    """Ленточная развёртка: все старые точки сдвигаются с одной скоростью.
+
+    Ширина равна трём периодам уже с первого кадра. Пока история короткая,
+    оставшаяся часть окна пуста; вычислений для отрицательного времени нет.
+    """
+    span = 6*math.pi/parameters.omega
+    return time-span, time
 
 
 def _clip_segment(x1, y1, x2, y2, axes):
@@ -292,7 +281,7 @@ def potential_scene(parameters, time, position, history, width, height, scheme, 
     lowest -= .15*(highest-lowest)
     if view_limits:
         lowest, highest = view_limits.energy_min, view_limits.energy_max
-    axes = _axes(scene, -extent, extent, lowest, highest, "x [1]", "Ueff [1]", palette, top=66)
+    axes = _axes(scene, -extent, extent, lowest, highest, "x", "Ueff", palette, top=66)
     _state_curve(scene, axes, points, [point[0] for point in points], palette)
     track = 33
     scene.line((axes.left, track, axes.right, track), palette.axes, 1.3)
@@ -311,27 +300,27 @@ def trajectory_scene(parameters, time, history, width, height, scheme, vertical=
     palette = get_scheme(scheme)
     scene = Scene(max(width, 220), max(height, 170), palette.background)
     extent = view_limits.extent if view_limits else _horizontal_extent(parameters, history)
-    period = 2*math.pi/parameters.omega
-    start = max(0, time-3*period)
-    end = max(time, parameters.dt)
+    start, end = _time_window(parameters, time)
     # Каждая сохранённая точка участвует в рисунке. Добавление новых точек
     # больше не меняет выбор старых точек и не создаёт рябь от прореживания.
     samples = [sample for sample in history if start <= sample.t <= end]
     count = max(200, math.ceil((height if vertical else width) * 2))
-    force_times = [start+(end-start)*i/count for i in range(count+1)]
+    observed_start = max(0, start)
+    force_times = ([observed_start+(end-observed_start)*i/count for i in range(count+1)]
+                   if end > observed_start else [])
     force_extent = max(parameters.f, .01)
     if vertical:
-        axes = _axes(scene, -extent, extent, start, end, "x [1]", "t [1]", palette, top=66)
+        axes = _axes(scene, -extent, extent, start, end, "x", "t", palette, top=66, time_axis="y")
         coordinate_points = [(sample.x, sample.t) for sample in samples]
         force_points = [(driving_force(t, parameters)/force_extent*extent, t) for t in force_times]
-        scene.text(scene.width-5, 12, "F [1]", palette.force, anchor="ne")
+        scene.text(scene.width-5, 12, "F", palette.force, anchor="ne")
         for index in range(5):
             fraction = index/4
             scene.text(axes.x(-extent+2*extent*fraction), 43,
                        _format_tick(-force_extent+2*force_extent*fraction), palette.force)
     else:
-        axes = _axes(scene, start, end, -extent, extent, "t [1]", "x [1]", palette,
-                     secondary=(-force_extent, force_extent))
+        axes = _axes(scene, start, end, -extent, extent, "t", "x", palette,
+                     secondary=(-force_extent, force_extent), time_axis="x")
         coordinate_points = [(sample.t, sample.x) for sample in samples]
         force_points = [(t, driving_force(t, parameters)/force_extent*extent) for t in force_times]
     _state_curve(scene, axes, coordinate_points, [sample.x for sample in samples], palette)

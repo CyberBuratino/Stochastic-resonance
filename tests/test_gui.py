@@ -2,13 +2,10 @@
 
 Включение: STOCHLAB_GUI_TESTS=1; на Linux требуется DISPLAY (например Xvfb).
 """
-import csv
 import os
-from pathlib import Path
-import tempfile
 from types import SimpleNamespace
+from tkinter import font as tkfont, ttk
 import unittest
-import xml.etree.ElementTree as ET
 
 from stochlab.app import Application
 from stochlab.model import Parameters
@@ -91,7 +88,7 @@ class InterfaceTests(unittest.TestCase):
             self.assertEqual(box.current(), selected)
             self.assertNotEqual(app.sidebar.canvas.yview(), before)
 
-    def test_graph_frames_reuse_one_canvas_item_and_export_vector_svg(self):
+    def test_graph_frames_reuse_one_canvas_item(self):
         app = self.app
         app._draw()
         items = [canvas.find_all() for canvas in (app.potential_canvas, app.trajectory_canvas)]
@@ -101,12 +98,6 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(items, [canvas.find_all() for canvas in (app.potential_canvas, app.trajectory_canvas)])
         for canvas in (app.potential_canvas, app.trajectory_canvas):
             self.assertEqual(canvas.type(canvas.find_all()[0]), "image")
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "graphs.svg"
-            app.save_svg(path)
-            self.assertNotIn("<image", path.read_text())
-            self.assertIn("polyline", path.read_text())
-
     def test_three_button_rows_fit_inside_sidebar(self):
         app = self.app
         for language in ("ru", "en"):
@@ -170,32 +161,57 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
         self.assertEqual(app.tr("start"), "Start")
         app.show_page("theory")
-        self.assertIn("Equations of motion", app.theory_text.get("1.0", "end"))
-        self.assertNotIn("Kramers", app.theory_text.get("1.0", "end"))
+        self.assertEqual(app.theory_text.get("1.0", "end").strip(), "TODO")
         app.show_page("authors")
         self.assertGreater(app.logo_image.width(), 100)
         app.toggle_language()
         self.assertEqual(app.tr("start"), "Старт")
 
-    def test_exports_include_current_appearance_and_physical_parameters(self):
+    def test_removed_helpers_and_export_actions_are_absent(self):
         app = self.app
-        app.advance_steps(1000)
-        app.set_scheme("monochrome")
-        before = self.snapshot()
-        with tempfile.TemporaryDirectory() as directory:
-            svg = Path(directory) / "graphs.svg"
-            csv_path = Path(directory) / "trajectory.csv"
-            app.save_svg(svg)
-            app.save_csv(csv_path)
-            tree = ET.parse(svg)
-            self.assertTrue(any("stroke-dasharray" in e.attrib for e in tree.iter()))
-            self.assertNotIn("#a34d0a", svg.read_text())
-            text = csv_path.read_text(encoding="utf-8-sig")
-            self.assertIn("# T=0.22", text)
-            rows = list(csv.reader(line for line in text.splitlines() if not line.startswith("#")))
-            self.assertEqual(rows[0], ["t", "x", "v", "force"])
-            self.assertGreater(len(rows), 10)
-        self.assertEqual(before, self.snapshot())
+        removed = {"scroll_hint", "reset_hint", "units", "vertical", "horizontal",
+                   "export_csv", "export_svg", "thermal", "barrier"}
+        self.assertTrue(removed.isdisjoint(key for widget, key in app._text_bindings))
+        for name in ("thermal_label", "barrier_label", "axis_hint", "save_csv", "save_svg", "export_csv", "export_svg"):
+            self.assertFalse(hasattr(app, name), name)
+        for language in ("ru", "en"):
+            app.language = language
+            app._translate()
+            self.assertEqual(app.theory_text.get("1.0", "end").strip(), "TODO")
+
+    def test_section_headings_are_emphasized(self):
+        app = self.app
+        style = ttk.Style(app)
+        for key in ("parameters", "potential", "trajectory"):
+            widget = next(widget for widget, text_key in app._text_bindings if text_key == key)
+            font = tkfont.Font(font=style.lookup(widget.cget("style"), "font"))
+            self.assertEqual(font.actual()["weight"], "bold")
+            self.assertGreater(font.actual()["size"], 12)
+            self.assertGreaterEqual(widget.winfo_width(), font.measure(widget.cget("text")), key)
+
+    def test_language_switch_keeps_home_and_graph_geometry(self):
+        app = self.app
+        for size in ("1240x880", "900x650"):
+            app.geometry(size)
+            app.update()
+            for page, canvases in (("home", (app.title_canvas,)),
+                                   ("lab", (app.potential_canvas, app.trajectory_canvas))):
+                app.show_page(page)
+                app.language = "en"
+                app._translate()
+                app.update()
+                geometry = [(c.winfo_rootx(), c.winfo_rooty(), c.winfo_width(), c.winfo_height())
+                            for c in canvases]
+                before = self.snapshot()
+                app.sidebar.canvas.yview_moveto(.25)
+                scroll = app.sidebar.canvas.yview()
+                for _ in range(4):
+                    app.toggle_language()
+                    app.update()
+                    self.assertEqual(geometry, [(c.winfo_rootx(), c.winfo_rooty(), c.winfo_width(), c.winfo_height())
+                                                 for c in canvases], (size, page, app.language))
+                    self.assertEqual(before, self.snapshot())
+                    self.assertEqual(scroll, app.sidebar.canvas.yview())
 
     def test_small_window_and_keyboard_access_to_bottom(self):
         app = self.app

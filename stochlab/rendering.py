@@ -1,15 +1,16 @@
 """Сглаженная экранная отрисовка без изменения исходных линий и данных.
 
-Сначала рисуем готовую сцену в увеличенном разрешении, затем уменьшаем её
-фильтром Lanczos. Это сглаживает края пикселей, но не усредняет траекторию.
-Canvas получает целый готовый кадр одной операцией, поэтому между кадрами
-не появляется пустое поле. Векторный экспорт по-прежнему выполняет Scene.
+AGG вычисляет покрытие пикселей по дробным координатам линий и окружностей.
+Даже сдвиг меньше одного пикселя меняет рисунок постепенно, без привязки к
+грубой вспомогательной сетке. Геометрия и физическая траектория не меняются.
+Canvas получает готовый кадр одной операцией, без промежуточной очистки.
 """
 from functools import lru_cache
 import math
 from pathlib import Path
 import sys
 
+import aggdraw
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 from . import appearance
@@ -79,37 +80,47 @@ def _dashed_paths(points, dash):
 
 
 def _stroke(draw, points, color, width, scale):
-    """Рисует ломаную с округлёнными соединениями и концами."""
-    if len(points) < 2:
+    """Рисует ломаную по дробным координатам без привязки к целым пикселям.
+
+    Штрих строит AGG; небольшие окружности округляют два открытых конца.
+    Каждая исходная точка сохраняется, даже если их несколько в одном пикселе.
+    """
+    if len(points) < 2 or width <= 0:
         return
-    pixels = [(x*scale, y*scale) for x, y in points]
-    line_width = max(1, round(width*scale))
-    draw.line(pixels, fill=color, width=line_width, joint="curve")
-    radius = line_width/2
-    for x, y in (pixels[0], pixels[-1]):
-        draw.ellipse((x-radius, y-radius, x+radius, y+radius), fill=color)
+    path = aggdraw.Path()
+    path.moveto(points[0][0]*scale, points[0][1]*scale)
+    for x, y in points[1:]:
+        path.lineto(x*scale, y*scale)
+    draw.path(path, aggdraw.Pen(color, width*scale))
+    radius = width*scale/2
+    brush = aggdraw.Brush(color)
+    for x, y in (points[0], points[-1]):
+        draw.ellipse(((x*scale-radius), (y*scale-radius),
+                      (x*scale+radius), (y*scale+radius)), None, brush)
 
 
 def render_scene(scene, scale=None):
     """Возвращает готовый RGB-кадр размера сцены; не изменяет саму сцену.
 
-    scale=3 рисует по девять вспомогательных пикселей на один конечный.
-    Увеличение масштаба повышает качество краёв, а не частоту физических
-    измерений. Физические координаты и положение каждой точки неизменны.
+    При scale=1 AGG уже сглаживает края по покрытию пикселей. Для больших
+    экранов можно оставить дополнительное увеличение (scale=2 или 3),
+    но оно не требуется для плавного отображения дробных координат.
     """
     if scale is None:
-        scale = getattr(appearance, "GRAPH_SUPERSAMPLING", 3)
+        scale = getattr(appearance, "GRAPH_SUPERSAMPLING", 1)
     if isinstance(scale, bool) or not isinstance(scale, int) or not 1 <= scale <= 8:
         raise ValueError("GRAPH_SUPERSAMPLING должен быть целым числом от 1 до 8")
     width, height = max(1, round(scene.width)), max(1, round(scene.height))
     image = Image.new("RGB", (width*scale, height*scale), scene.background)
-    draw = ImageDraw.Draw(image)
+    draw = None
     font_file = getattr(appearance, "GRAPH_FONT_FILE", "assets/fonts/DejaVuSans.ttf")
     anchors = {
         "center": "mm", "w": "lm", "e": "rm", "n": "mt", "s": "mb",
         "nw": "lt", "ne": "rt", "sw": "lb", "se": "rb",
     }
     for item in scene.primitives:
+        if item.kind in ("line", "circle") and draw is None:
+            draw = aggdraw.Draw(image)
         if item.kind == "line":
             points = _points(item.coordinates)
             paths = _dashed_paths(points, item.dash) if item.dash else (points,)
@@ -119,12 +130,19 @@ def render_scene(scene, scale=None):
             x, y, radius = item.coordinates
             bounds = ((x-radius)*scale, (y-radius)*scale,
                       (x+radius)*scale, (y+radius)*scale)
-            draw.ellipse(bounds, fill=item.fill or item.color)
+            draw.ellipse(bounds, None, aggdraw.Brush(item.fill or item.color))
         elif item.kind == "text":
+            # AGG имеет собственный буфер. Завершаем его перед Pillow-текстом,
+            # чтобы сохранить порядок слоёв: следующий штрих не сотрёт подпись.
+            if draw is not None:
+                draw.flush()
+                draw = None
             x, y = item.coordinates
             font = _font(max(1, round(item.font_size*scale)), font_file)
-            draw.text((x*scale, y*scale), item.text, fill=item.color,
-                      font=font, anchor=anchors.get(item.anchor, "mm"))
+            ImageDraw.Draw(image).text((x*scale, y*scale), item.text, fill=item.color,
+                                       font=font, anchor=anchors.get(item.anchor, "mm"))
+    if draw is not None:
+        draw.flush()
     if scale != 1:
         image = image.resize((width, height), Image.Resampling.LANCZOS)
     return image

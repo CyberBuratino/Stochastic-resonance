@@ -93,7 +93,7 @@ def get_scheme(scheme: str | ColorScheme) -> ColorScheme:
     """Возвращает палитру по имени; готовую палитру можно передать напрямую."""
     return SCHEMES[scheme] if isinstance(scheme, str) else scheme
 
-# Графики рисуются в увеличенном буфере и уменьшаются с качественным фильтром.
-# Это сглаживает пиксельные края, но не усредняет физическую траекторию.
-GRAPH_SUPERSAMPLING = 2
+# AGG рисует дробные координаты со сглаживанием уже при масштабе 1.
+# Большие значения повышают нагрузку; физические данные не усредняются.
+GRAPH_SUPERSAMPLING = 1
 GRAPH_FONT_FILE = "assets/fonts/DejaVuSans.ttf"
