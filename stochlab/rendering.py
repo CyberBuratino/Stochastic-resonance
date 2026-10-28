@@ -4,13 +4,20 @@ AGG вычисляет покрытие пикселей по дробным к�
 Даже сдвиг меньше одного пикселя меняет рисунок постепенно, без привязки к
 грубой вспомогательной сетке. Геометрия и физическая траектория не меняются.
 Canvas получает готовый кадр одной операцией, без промежуточной очистки.
+Если aggdraw не установлен или его нативная библиотека не загружается,
+Pillow рисует тот же кадр с увеличением разрешения и сглаживанием.
 """
 from functools import lru_cache
 import math
 from pathlib import Path
 import sys
 
-import aggdraw
+try:
+    import aggdraw
+except (ImportError, OSError):
+    # После обновления исходников новая зависимость может ещё отсутствовать.
+    # Не оставляем пустые Canvas из-за ошибки в отложенном обработчике Tk.
+    aggdraw = None
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 from . import appearance
@@ -99,17 +106,33 @@ def _stroke(draw, points, color, width, scale):
                       (x*scale+radius), (y*scale+radius)), None, brush)
 
 
+def _pillow_stroke(draw, points, color, width, scale):
+    """Резервный штрих: все исходные точки и те же округлённые концы."""
+    if len(points) < 2 or width <= 0:
+        return
+    scaled = [(x*scale, y*scale) for x, y in points]
+    draw.line(scaled, fill=color, width=max(1, round(width*scale)), joint="curve")
+    radius = width*scale/2
+    for x, y in (scaled[0], scaled[-1]):
+        draw.ellipse((x-radius, y-radius, x+radius, y+radius), fill=color)
+
+
 def render_scene(scene, scale=None):
     """Возвращает готовый RGB-кадр размера сцены; не изменяет саму сцену.
 
     При scale=1 AGG уже сглаживает края по покрытию пикселей. Для больших
     экранов можно оставить дополнительное увеличение (scale=2 или 3),
     но оно не требуется для плавного отображения дробных координат.
+    Без AGG используется Pillow с промежуточным масштабом не ниже 4.
     """
     if scale is None:
         scale = getattr(appearance, "GRAPH_SUPERSAMPLING", 1)
     if isinstance(scale, bool) or not isinstance(scale, int) or not 1 <= scale <= 8:
         raise ValueError("GRAPH_SUPERSAMPLING должен быть целым числом от 1 до 8")
+    if aggdraw is None:
+        # Четырёхкратное разрешение сглаживает края резервного растеризатора.
+        # Это обработка изображения; данные и геометрия сцены не меняются.
+        scale = max(4, scale)
     width, height = max(1, round(scene.width)), max(1, round(scene.height))
     image = Image.new("RGB", (width*scale, height*scale), scene.background)
     draw = None
@@ -120,28 +143,32 @@ def render_scene(scene, scale=None):
     }
     for item in scene.primitives:
         if item.kind in ("line", "circle") and draw is None:
-            draw = aggdraw.Draw(image)
+            draw = aggdraw.Draw(image) if aggdraw is not None else ImageDraw.Draw(image)
         if item.kind == "line":
             points = _points(item.coordinates)
             paths = _dashed_paths(points, item.dash) if item.dash else (points,)
             for path in paths:
-                _stroke(draw, path, item.color, item.width, scale)
+                stroke = _stroke if aggdraw is not None else _pillow_stroke
+                stroke(draw, path, item.color, item.width, scale)
         elif item.kind == "circle":
             x, y, radius = item.coordinates
             bounds = ((x-radius)*scale, (y-radius)*scale,
                       (x+radius)*scale, (y+radius)*scale)
-            draw.ellipse(bounds, None, aggdraw.Brush(item.fill or item.color))
+            if aggdraw is not None:
+                draw.ellipse(bounds, None, aggdraw.Brush(item.fill or item.color))
+            else:
+                draw.ellipse(bounds, fill=item.fill or item.color)
         elif item.kind == "text":
             # AGG имеет собственный буфер. Завершаем его перед Pillow-текстом,
             # чтобы сохранить порядок слоёв: следующий штрих не сотрёт подпись.
-            if draw is not None:
+            if draw is not None and aggdraw is not None:
                 draw.flush()
                 draw = None
             x, y = item.coordinates
             font = _font(max(1, round(item.font_size*scale)), font_file)
             ImageDraw.Draw(image).text((x*scale, y*scale), item.text, fill=item.color,
                                        font=font, anchor=anchors.get(item.anchor, "mm"))
-    if draw is not None:
+    if draw is not None and aggdraw is not None:
         draw.flush()
     if scale != 1:
         image = image.resize((width, height), Image.Resampling.LANCZOS)

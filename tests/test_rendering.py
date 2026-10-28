@@ -1,6 +1,10 @@
 """Проверки растеризации: края сглаживаются, геометрия не меняется."""
 from copy import deepcopy
+from pathlib import Path
+import subprocess
+import sys
 import unittest
+from unittest.mock import patch
 
 from PIL import ImageChops
 
@@ -16,6 +20,47 @@ def rgb_pixels(image):
 
 
 class RenderingTests(unittest.TestCase):
+    def test_renderer_imports_when_aggdraw_is_missing_or_unloadable(self):
+        # Отдельный процесс воспроизводит запуск обновлённых исходников:
+        # модуль ещё не попадал в кэш импортов и отсутствует либо не грузит DLL.
+        for error in ("ModuleNotFoundError", "OSError"):
+            with self.subTest(error=error):
+                script = f"""
+import sys
+class MissingAggdraw:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'aggdraw':
+            raise {error}('Simulated unavailable aggdraw')
+sys.meta_path.insert(0, MissingAggdraw())
+from stochlab.rendering import aggdraw, render_scene
+from stochlab.plotting import Scene
+from PIL import ImageChops
+assert aggdraw is None
+scene = Scene(100, 80)
+scene.line((10, 10, 90, 70), '#000000', 2)
+assert ImageChops.invert(render_scene(scene)).getbbox() is not None
+"""
+                result = subprocess.run([sys.executable, "-c", script],
+                                        cwd=Path(__file__).resolve().parent.parent,
+                                        capture_output=True, text=True, timeout=15)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_pillow_fallback_preserves_geometry_text_dashes_and_color(self):
+        scene = Scene(200, 120)
+        scene.text(100, 22, "Частица x²", "#000000", font_size=16)
+        scene.line((10, 60, 190, 60), "#000000", 2, (12, 12))
+        scene.circle(100, 95, 7, "#245b86")
+        before = deepcopy(scene)
+        with patch("stochlab.rendering.aggdraw", None):
+            image = render_scene(scene)
+        self.assertEqual(image.size, (200, 120))
+        self.assertEqual(scene, before)
+        self.assertIsNotNone(ImageChops.invert(image.crop((0, 0, 200, 40))).getbbox())
+        self.assertEqual(image.getpixel((100, 95)), (36, 91, 134))
+        self.assertEqual(image.getpixel((16, 60)), (0, 0, 0))
+        self.assertEqual(image.getpixel((28, 60)), (255, 255, 255))
+        self.assertTrue(any(0 < red < 255 for red, _, _ in rgb_pixels(image)))
+
     def test_diagonal_has_native_subpixel_coverage(self):
         scene = Scene(80, 60)
         scene.line((8.25, 8.1, 70.4, 45.2), "#000000", 1.4)

@@ -34,25 +34,45 @@ def main() -> None:
     from stochlab.app import Application
     application = Application(resource_path("assets/vmk-logo.png"))
     if args.smoke_test_gui:
-        # Проверяем именно упакованный мост Pillow → Tk и обе картинки.
+        # Проверяем стартовую иллюстрацию и оба графика через мост Pillow → Tk.
+        from PIL import Image, ImageChops, ImageTk
         errors = []
         application.report_callback_exception = lambda kind, value, trace: errors.append(str(value))
-        application.show_page("lab")
+
+        def check_frame(canvas):
+            items = canvas.find_all()
+            if len(items) != 1 or canvas.type(items[0]) != "image":
+                raise RuntimeError("Frame was not displayed")
+            # Элемент Canvas сам по себе не доказывает, что картинка не пустая.
+            frame = ImageTk.getimage(canvas._scene_photo).convert("RGB")
+            background = Image.new("RGB", frame.size, canvas.cget("background"))
+            histogram = ImageChops.difference(frame, background).convert("L").histogram()
+            if sum(histogram[1:]) < 100:
+                raise RuntimeError("Displayed frame is blank")
+
+        def check_home():
+            try:
+                check_frame(application.title_canvas)
+            except Exception as error:
+                errors.append(str(error))
+            application.show_page("lab")
+            application.advance_steps(1000)
+            application.after(250, finish_check)
 
         def finish_check():
             try:
                 for canvas in (application.potential_canvas, application.trajectory_canvas):
-                    items = canvas.find_all()
-                    if len(items) != 1 or canvas.type(items[0]) != "image":
-                        errors.append("Graph frame was not displayed")
+                    check_frame(canvas)
+            except Exception as error:
+                errors.append(str(error))
             finally:
                 application.destroy()
 
-        application.after(500, finish_check)
+        application.after(250, check_home)
         application.mainloop()
         if errors:
             raise RuntimeError("; ".join(errors))
-        print("OK: packaged GUI and both graph frames")
+        print("OK: GUI, nonblank home illustration and both graph frames")
         return
     application.mainloop()
 
