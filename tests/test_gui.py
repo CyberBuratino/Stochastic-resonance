@@ -3,9 +3,15 @@
 Включение: STOCHLAB_GUI_TESTS=1; на Linux требуется DISPLAY (например Xvfb).
 """
 import os
+from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 from tkinter import font as tkfont, ttk
 import unittest
+from unittest.mock import patch
+
+from PIL import Image, ImageChops, ImageTk
 
 from stochlab.app import Application
 from stochlab.model import Parameters
@@ -17,8 +23,8 @@ class InterfaceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = Application()
-        cls.app.update()
         cls.app.report_callback_exception = cls.callback_error
+        cls.app.update()
 
     @staticmethod
     def callback_error(kind, value, traceback):
@@ -44,6 +50,58 @@ class InterfaceTests(unittest.TestCase):
     def snapshot(self):
         app = self.app
         return app.model.sample(), app.model.transitions, tuple(app.history)
+
+    def test_all_pictures_render_without_aggdraw_and_update_during_simulation(self):
+        app = self.app
+
+        def check_frame(canvas):
+            items = canvas.find_all()
+            self.assertEqual(len(items), 1)
+            self.assertEqual(canvas.type(items[0]), "image")
+            image = ImageTk.getimage(canvas._scene_photo).convert("RGB")
+            self.assertEqual(image.size, (canvas.winfo_width(), canvas.winfo_height()))
+            background = Image.new("RGB", image.size, canvas.cget("background"))
+            histogram = ImageChops.difference(image, background).convert("L").histogram()
+            self.assertGreater(sum(histogram[1:]), 100)
+            return image
+
+        with patch("stochlab.rendering.aggdraw", None):
+            app.show_page("home")
+            app.update()
+            check_frame(app.title_canvas)
+            app.show_page("lab")
+            app.advance_steps(1000)
+            app.update()
+            check_frame(app.potential_canvas)
+            first = check_frame(app.trajectory_canvas)
+            app.advance_steps(1000)
+            app.request_draw()
+            app.update()
+            second = check_frame(app.trajectory_canvas)
+            self.assertIsNotNone(ImageChops.difference(first, second).getbbox())
+            before = self.snapshot()
+            app.rotate()
+            app.set_scheme("monochrome")
+            app.toggle_language()
+            app.update()
+            check_frame(app.potential_canvas)
+            check_frame(app.trajectory_canvas)
+            self.assertEqual(before, self.snapshot())
+
+    def test_source_startup_without_aggdraw_displays_all_three_pictures(self):
+        # Тот же вход, что у start-windows.bat, в свежем процессе Python.
+        script = """
+import runpy
+import sys
+sys.modules['aggdraw'] = None
+sys.argv = ['main.py', '--smoke-test-gui']
+runpy.run_path('main.py', run_name='__main__')
+"""
+        result = subprocess.run([sys.executable, "-c", script],
+                                cwd=Path(__file__).resolve().parent.parent,
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("nonblank home illustration and both graph frames", result.stdout)
 
     def test_sidebar_scroll_does_not_move_plots_or_reset_simulation(self):
         app = self.app
