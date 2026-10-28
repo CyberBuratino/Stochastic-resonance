@@ -4,20 +4,17 @@
 надписи — в texts.py, рисунки — в plotting.py. Численный метод здесь не описан.
 """
 from collections import deque
-from dataclasses import asdict
-import csv
 import math
 from pathlib import Path
 import time
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import xml.etree.ElementTree as ET
+from tkinter import font as tkfont
+from tkinter import ttk
 
 from . import appearance as visual
-from .model import (Model, Parameters, PARAMETER_LIMITS, barrier_height,
-                    critical_force, noise_intensity)
+from .model import Model, Parameters, PARAMETER_LIMITS
 from .plotting import ViewLimits, potential_scene, title_scene, trajectory_scene
-from .texts import EN, RU, THEORY_EN, THEORY_RU
+from .texts import EN, RU, THEORY_PLACEHOLDER
 
 
 # Описание полей: имя в модели, ключ перевода, шаг ползунка.
@@ -158,6 +155,9 @@ class Application(tk.Tk):
         style.configure("TLabel", background=colors["background"])
         style.configure("Panel.TFrame", background=colors["panel"])
         style.configure("Panel.TLabel", background=colors["panel"])
+        section_font = (visual.FONT_FAMILY, visual.BODY_FONT_SIZE + 2, "bold")
+        style.configure("Section.TLabel", font=section_font)
+        style.configure("PanelHeading.TLabel", background=colors["panel"], font=section_font)
         style.configure("Hint.TLabel", background=colors["panel"], foreground=colors["muted"],
                         font=(visual.FONT_FAMILY, visual.SMALL_FONT_SIZE))
         style.configure("Title.TLabel", font=(visual.FONT_FAMILY, visual.TITLE_FONT_SIZE, "bold"))
@@ -198,21 +198,28 @@ class Application(tk.Tk):
         self.navigation = ttk.Frame(self, padding=(20, 4))
         self.navigation.grid(row=1, column=0, sticky="ew")
         for index, name in enumerate(("home", "lab", "theory", "authors")):
-            self._button(self.navigation, name, lambda page=name: self.show_page(page)).grid(row=0, column=index, padx=(0, 8))
+            self._button(self.navigation, name, lambda page=name: self.show_page(page), width=14).grid(row=0, column=index, padx=(0, 8))
         self.navigation.columnconfigure(4, weight=1)
         self._button(self.navigation, "exit", self.destroy).grid(row=0, column=5, sticky="e")
 
     def _build_home(self):
         page = self._new_page("home")
-        page.columnconfigure(0, weight=1)
-        page.columnconfigure(1, weight=1)
+        # Равные колонки не зависят от длины перевода: рисунок остаётся на месте.
+        page.columnconfigure(0, weight=1, uniform="home")
+        page.columnconfigure(1, weight=1, uniform="home")
         page.rowconfigure(0, weight=1)
         left = ttk.Frame(page, padding=20)
         left.grid(row=0, column=0, sticky="ew")
-        self.home_title = self._label(left, "title", style="Title.TLabel", wraplength=490)
-        self.home_title.pack(anchor="w", pady=(0, 24))
+        # Под заголовок зарезервирована одна и та же высота на обоих языках.
+        title_font = tkfont.Font(family=visual.FONT_FAMILY, size=visual.TITLE_FONT_SIZE, weight="bold")
+        title_area = ttk.Frame(left, height=title_font.metrics("linespace") * 3)
+        title_area.pack(fill="x", pady=(0, 24))
+        title_area.pack_propagate(False)
+        self.home_title = self._label(title_area, "title", style="Title.TLabel", wraplength=450)
+        self.home_title.pack(anchor="w")
+        left.bind("<Configure>", lambda event: self.home_title.configure(wraplength=max(200, event.width-40)))
         for name in ("lab", "theory", "authors"):
-            self._button(left, name, lambda target=name: self.show_page(target)).pack(anchor="w", pady=5)
+            self._button(left, name, lambda target=name: self.show_page(target), width=24).pack(anchor="w", pady=5)
         self.title_canvas = tk.Canvas(page, background="white", highlightthickness=0)
         self.title_canvas.grid(row=0, column=1, sticky="nsew")
         self.title_canvas.bind("<Configure>", self.request_draw)
@@ -225,8 +232,7 @@ class Application(tk.Tk):
         self.sidebar.grid(row=0, column=0, sticky="ns", padx=(0, 18))
         controls = self.sidebar.content
         controls.columnconfigure(0, weight=1)
-        self._label(controls, "parameters", style="Panel.TLabel").pack(anchor="w", pady=(0, 12))
-        self._label(controls, "scroll_hint", style="Hint.TLabel", wraplength=260).pack(fill="x", pady=(0, 14))
+        self._label(controls, "parameters", style="PanelHeading.TLabel").pack(anchor="w", pady=(0, 12))
         self.parameter_vars = {}
         self.parameter_entries = {}
         self.parameter_scales = {}
@@ -252,10 +258,6 @@ class Application(tk.Tk):
         self.drive_button = self._bind_text(ttk.Checkbutton(controls, variable=self.drive_var,
                                         command=self.apply_parameters, style="Panel.TCheckbutton"), "drive")
         self.drive_button.pack(anchor="w", pady=(6, 12))
-        self.thermal_label = ttk.Label(controls, style="Hint.TLabel", wraplength=260)
-        self.thermal_label.pack(fill="x", pady=(0, 10))
-        self.barrier_label = ttk.Label(controls, style="Hint.TLabel", wraplength=260)
-        self.barrier_label.pack(fill="x", pady=(0, 14))
         self._label(controls, "seed", style="Panel.TLabel").pack(anchor="w")
         self.seed_var = tk.StringVar(value=str(self.parameters.seed))
         seed_entry = ttk.Entry(controls, textvariable=self.seed_var)
@@ -287,9 +289,6 @@ class Application(tk.Tk):
             button.pack(side="left", expand=True, fill="x")
             if key == "pause":
                 self.pause_button = button
-        self._button(controls, "export_csv", self.export_csv).pack(fill="x", pady=(0, 6))
-        self._button(controls, "export_svg", self.export_svg).pack(fill="x", pady=(0, 12))
-        self._label(controls, "reset_hint", style="Hint.TLabel", wraplength=260).pack(fill="x", pady=(0, 12))
         self.notice_label = ttk.Label(controls, style="Hint.TLabel", wraplength=260)
         self.notice_label.pack(fill="x")
         # Эта колонка не входит в прокручиваемую область.
@@ -301,7 +300,7 @@ class Application(tk.Tk):
         heading = ttk.Frame(field)
         heading.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         heading.columnconfigure(0, weight=1)
-        self._label(heading, "potential").grid(row=0, column=0, sticky="w")
+        self._label(heading, "potential", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         self.status_label = ttk.Label(heading)
         self.status_label.grid(row=0, column=1, sticky="e")
         self.statistics_label = ttk.Label(field)
@@ -311,13 +310,10 @@ class Application(tk.Tk):
         trajectory_header = ttk.Frame(field)
         trajectory_header.grid(row=3, column=0, sticky="ew", pady=(10, 0))
         trajectory_header.columnconfigure(0, weight=1)
-        self._label(trajectory_header, "trajectory").grid(row=0, column=0, sticky="w")
-        self._button(trajectory_header, "rotate", self.rotate).grid(row=0, column=1, sticky="e")
-        self.axis_hint = ttk.Label(field, font=(visual.FONT_FAMILY, visual.SMALL_FONT_SIZE))
-        self.axis_hint.grid(row=4, column=0, sticky="w", pady=4)
+        self._label(trajectory_header, "trajectory", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        self._button(trajectory_header, "rotate", self.rotate, width=9).grid(row=0, column=1, sticky="e")
         self.trajectory_canvas = tk.Canvas(field, background="white", highlightthickness=0, height=300)
         self.trajectory_canvas.grid(row=5, column=0, sticky="nsew")
-        self._label(field, "units", font=(visual.FONT_FAMILY, visual.SMALL_FONT_SIZE)).grid(row=6, column=0, sticky="w")
         for canvas in (self.potential_canvas, self.trajectory_canvas):
             canvas.bind("<Configure>", self.request_draw)
         self._sync_parameter_widgets()
@@ -328,15 +324,10 @@ class Application(tk.Tk):
         page.columnconfigure(0, weight=1)
         self.theory_text = tk.Text(page, wrap="word", borderwidth=0, highlightthickness=0,
                                   background="white", foreground=visual.UI_COLORS["text"],
-                                  padx=24, pady=16, font=(visual.FONT_FAMILY, visual.BODY_FONT_SIZE),
-                                  spacing3=15)
-        scrollbar = ttk.Scrollbar(page, orient="vertical", command=self.theory_text.yview)
-        self.theory_text.configure(yscrollcommand=scrollbar.set)
+                                  padx=24, pady=16, font=(visual.FONT_FAMILY, visual.BODY_FONT_SIZE))
         self.theory_text.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.theory_text.tag_configure("heading", font=(visual.FONT_FAMILY, 18, "bold"), spacing1=18, spacing3=12)
-        self.theory_text.tag_configure("formula", font=(visual.FONT_FAMILY, 18), background="#f3f5f7", spacing1=10, spacing3=20)
-        self.theory_text.tag_configure("body", spacing3=16)
+        self.theory_text.insert("1.0", THEORY_PLACEHOLDER)
+        self.theory_text.configure(state="disabled")
 
     def _build_authors(self, logo_path):
         page = self._new_page("authors")
@@ -351,6 +342,7 @@ class Application(tk.Tk):
         self._label(content, "teacher").pack(anchor="w")
 
     def _translate(self):
+        scroll_position = self.sidebar.canvas.yview()[0]
         self.title(self.tr("title"))
         self.language_button.configure(text="EN" if self.language == "ru" else "RU")
         for widget, key in self._text_bindings:
@@ -359,12 +351,8 @@ class Application(tk.Tk):
         self.scheme_box.current(list(visual.SCHEMES).index(self.scheme))
         self.speed_box.configure(values=[self.tr("slow"), self.tr("fast")])
         self.speed_box.current(0 if self.speed == "slow" else 1)
-        self.theory_text.configure(state="normal")
-        self.theory_text.delete("1.0", "end")
-        for kind, text in (THEORY_RU if self.language == "ru" else THEORY_EN):
-            self.theory_text.insert("end", text + "\n\n", kind)
-        self.theory_text.configure(state="disabled")
         self._update_labels()
+        self.sidebar.canvas.yview_moveto(scroll_position)
         self.request_draw()
 
     def toggle_language(self):
@@ -506,25 +494,17 @@ class Application(tk.Tk):
         self.after(FRAME_MILLISECONDS, self._tick)
 
     def _update_labels(self):
-        if not hasattr(self, "thermal_label"):
+        if not hasattr(self, "status_label"):
             return
         status = "running" if self.running else "paused" if self.model.t else "ready"
         self.status_label.configure(text=self.tr(status))
         self.pause_button.configure(state="normal" if self.running else "disabled")
-        self.thermal_label.configure(text=self.tr("thermal").format(D=noise_intensity(self.parameters)))
-        if self.parameters.a > 0:
-            shape = self.tr("barrier").format(barrier=barrier_height(self.parameters),
-                                              critical=critical_force(self.parameters))
-        else:
-            shape = self.tr("single" if self.parameters.b else "flat")
-        self.barrier_label.configure(text=shape)
         enabled = "normal" if self.parameters.drive_enabled else "disabled"
         for name in ("f", "omega"):
             self.parameter_entries[name].configure(state=enabled)
             self.parameter_scales[name].configure(state=enabled)
         transitions = str(self.model.transitions) if self.parameters.a else "—"
         self.statistics_label.configure(text=f"t = {self.model.t:.1f}     x = {self.model.x:.2f}     {self.tr('transitions')}: {transitions}")
-        self.axis_hint.configure(text=self.tr("vertical" if self.vertical else "horizontal"))
 
     def request_draw(self, _event=None):
         if not self._render_pending:
@@ -537,7 +517,7 @@ class Application(tk.Tk):
             title_scene(max(250, self.title_canvas.winfo_width()),
                         max(200, self.title_canvas.winfo_height()), self.scheme).draw(self.title_canvas)
         elif self.current_page == "lab":
-            # Добавляем актуальную точку только в рисунок; частота CSV не меняется.
+            # Добавляем текущую точку только в рисунок; история модели не меняется.
             visible = list(self.history)
             if not visible or visible[-1].t != self.model.t:
                 visible.append(self.model.sample())
@@ -553,55 +533,3 @@ class Application(tk.Tk):
             ]
             for scene, canvas in zip(self._scenes, (self.potential_canvas, self.trajectory_canvas)):
                 scene.draw(canvas)
-
-    def save_csv(self, path):
-        """Сохраняет видимую историю с параметрами; не изменяет модель."""
-        with Path(path).open("w", encoding="utf-8-sig", newline="") as file:
-            file.write("# inertial Langevin; dimensionless; D=gamma*T\n")
-            for key, value in asdict(self.parameters).items():
-                file.write(f"# {key}={value}\n")
-            file.write(f"# D={noise_intensity(self.parameters)}\n")
-            writer = csv.writer(file)
-            writer.writerow(["t", "x", "v", "force"])
-            for point in self.history:
-                writer.writerow([point.t, point.x, point.v, point.force])
-
-    def save_svg(self, path):
-        """Два текущих графика в одном векторном рисунке, включая пунктир."""
-        self._draw()
-        namespace = "http://www.w3.org/2000/svg"
-        ET.register_namespace("", namespace)
-        gap = 30
-        width = max(scene.width for scene in self._scenes)
-        height = sum(scene.height for scene in self._scenes) + gap
-        combined = ET.Element(f"{{{namespace}}}svg", {
-            "width": str(width), "height": str(height),
-            "viewBox": f"0 0 {width} {height}", "version": "1.1",
-        })
-        ET.SubElement(combined, f"{{{namespace}}}title").text = self.tr("title")
-        offset = 0
-        for scene in self._scenes:
-            image = ET.fromstring(scene.to_svg())
-            image.set("x", "0")
-            image.set("y", str(offset))
-            combined.append(image)
-            offset += scene.height + gap
-        ET.ElementTree(combined).write(path, encoding="utf-8", xml_declaration=True)
-
-    def _choose_export(self, extension, save_function):
-        path = filedialog.asksaveasfilename(parent=self, defaultextension=extension,
-                    filetypes=[(extension.upper().lstrip("."), f"*{extension}")],
-                    initialfile="stochastic-resonance" + extension)
-        if not path:
-            return
-        try:
-            save_function(path)
-            self.notice_label.configure(text=self.tr("saved"))
-        except (OSError, ValueError) as error:
-            messagebox.showerror(self.tr("save_error"), str(error), parent=self)
-
-    def export_csv(self):
-        self._choose_export(".csv", self.save_csv)
-
-    def export_svg(self):
-        self._choose_export(".svg", self.save_svg)

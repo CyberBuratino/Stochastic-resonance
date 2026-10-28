@@ -16,22 +16,55 @@ def rgb_pixels(image):
 
 
 class RenderingTests(unittest.TestCase):
-    def test_diagonal_has_subpixel_coverage(self):
+    def test_diagonal_has_native_subpixel_coverage(self):
         scene = Scene(80, 60)
-        scene.line((8, 8, 70, 45), "#000000", 1)
-        native = render_scene(scene, scale=1)
-        smooth = render_scene(scene, scale=3)
-        native_gray = {pixel[0] for pixel in rgb_pixels(native)}
-        smooth_gray = {pixel[0] for pixel in rgb_pixels(smooth)}
-        self.assertEqual(native_gray, {0, 255})
-        self.assertTrue(any(0 < value < 255 for value in smooth_gray))
-        self.assertGreater(len(smooth_gray), 10)
-        # Сглаживание занимает только ближайшие пиксели к исходной линии.
-        ink = ImageChops.invert(smooth).getbbox()
-        self.assertLessEqual(abs(ink[0]-8), 4)
-        self.assertLessEqual(abs(ink[1]-8), 4)
-        self.assertLessEqual(abs(ink[2]-70), 5)
-        self.assertLessEqual(abs(ink[3]-45), 5)
+        scene.line((8.25, 8.1, 70.4, 45.2), "#000000", 1.4)
+        image = render_scene(scene, scale=1)
+        shades = {pixel[0] for pixel in rgb_pixels(image)}
+        self.assertTrue(any(0 < value < 255 for value in shades))
+        self.assertGreater(len(shades), 10)
+        # Покрытие края не должно размывать линию на несколько пикселей.
+        ink = ImageChops.invert(image).getbbox()
+        self.assertLessEqual(abs(ink[0]-8.25), 2)
+        self.assertLessEqual(abs(ink[1]-8.1), 2)
+        self.assertLessEqual(abs(ink[2]-70.4), 2)
+        self.assertLessEqual(abs(ink[3]-45.2), 2)
+
+    def test_fractional_line_motion_changes_each_frame(self):
+        centers = []
+        for index in range(9):
+            x = 30 + index/8
+            scene = Scene(80, 60)
+            scene.line((x, 8, x, 52), "#000000", 1.4)
+            image = render_scene(scene, scale=1)
+            weights = [sum(255-image.getpixel((column, row))[0]
+                           for row in range(15, 45)) for column in range(80)]
+            centers.append(sum(column*weight for column, weight in enumerate(weights))/sum(weights))
+        # Для штриха уже двух пикселей первый момент по центрам пикселей
+        # слегка нелинеен. Требуем реакции на каждый малый шаг без ступенек:
+        # прежний 2×-рендер давал здесь шесть нулей и скачок 0,668 пикселя.
+        for first, second in zip(centers, centers[1:]):
+            self.assertGreater(second-first, .075)
+            self.assertLess(second-first, .2)
+        self.assertAlmostEqual(centers[-1]-centers[0], 1, places=5)
+
+    def test_thin_line_has_no_distant_resampling_halo(self):
+        scene = Scene(80, 60)
+        scene.line((30.25, 8, 30.25, 52), "#000000", 1.4)
+        image = render_scene(scene, scale=1)
+        for x in range(80):
+            if x < 28 or x > 32:
+                for y in range(12, 48):
+                    self.assertEqual(image.getpixel((x, y)), (255, 255, 255))
+
+    def test_labels_survive_geometry_drawn_after_them(self):
+        label = Scene(180, 80)
+        label.text(90, 25, "Температура T", "#000000", font_size=16)
+        expected = render_scene(label, scale=1)
+        label.line((10, 65, 170, 65), "#245b86", 2)
+        actual = render_scene(label, scale=1)
+        self.assertIsNone(ImageChops.difference(expected.crop((0, 0, 180, 50)),
+                                               actual.crop((0, 0, 180, 50))).getbbox())
 
     def test_scene_size_mode_and_geometry_are_preserved(self):
         scene = Scene(123, 87)
