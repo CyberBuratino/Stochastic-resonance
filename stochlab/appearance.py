@@ -11,6 +11,7 @@ from dataclasses import dataclass
 # Настройки окна и элементов управления.
 FONT_FAMILY = "DejaVu Sans"
 BODY_FONT_SIZE = 12
+BUTTON_FONT_SIZE = 14
 SMALL_FONT_SIZE = 10
 HEADING_FONT_SIZE = 20
 TITLE_FONT_SIZE = 30
@@ -38,6 +39,8 @@ PLOT_LINE_WIDTH = 2.0
 FORCE_LINE_WIDTH = 2.0
 PARTICLE_RADIUS = 7
 GRID_LINE_WIDTH = 1
+HISTORY_PERIOD_OPTIONS = (3, 6)
+DEFAULT_HISTORY_PERIODS = 3
 
 
 @dataclass(frozen=True)

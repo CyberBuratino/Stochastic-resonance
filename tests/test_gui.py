@@ -3,6 +3,7 @@
 Включение: STOCHLAB_GUI_TESTS=1; на Linux требуется DISPLAY (например Xvfb).
 """
 import os
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -15,6 +16,8 @@ from PIL import Image, ImageChops, ImageTk
 
 from stochlab.app import Application
 from stochlab.model import Parameters
+from stochlab import appearance
+from stochlab.presets import DEMONSTRATION_SPEED, RESONANCE_PARAMETERS
 from stochlab.texts import EN, RU
 
 
@@ -39,6 +42,7 @@ class InterfaceTests(unittest.TestCase):
         app.pause()
         app.geometry("1240x880")
         app.language = "ru"
+        app.set_history_periods(appearance.DEFAULT_HISTORY_PERIODS)
         app.parameters = Parameters()
         app._sync_parameter_widgets()
         app.reset_model()
@@ -134,7 +138,7 @@ runpy.run_path('main.py', run_name='__main__')
 
     def test_wheel_over_closed_menu_scrolls_without_changing_choice(self):
         app = self.app
-        for box in (app.scheme_box, app.speed_box):
+        for box in (app.scheme_box, app.speed_box, app.history_box):
             box.focus_force()
             app.sidebar.reveal_focus(SimpleNamespace(widget=box))
             app.update()
@@ -156,19 +160,120 @@ runpy.run_path('main.py', run_name='__main__')
         self.assertEqual(items, [canvas.find_all() for canvas in (app.potential_canvas, app.trajectory_canvas)])
         for canvas in (app.potential_canvas, app.trajectory_canvas):
             self.assertEqual(canvas.type(canvas.find_all()[0]), "image")
-    def test_three_button_rows_fit_inside_sidebar(self):
+    def test_parameter_buttons_fit_inside_sidebar(self):
         app = self.app
         for language in ("ru", "en"):
             app.language = language
             app._translate()
             app.update()
-            left = app.sidebar.content.winfo_rootx()
-            right = left + app.sidebar.content.winfo_width()
+            left = app.sidebar.winfo_rootx()
+            right = left + app.sidebar.winfo_width()
             for widget, key in app._text_bindings:
-                if key in ("low", "medium", "high", "start", "pause", "stop"):
+                if key in ("low", "medium", "high", "start", "pause", "stop", "resonance"):
                     self.assertTrue(widget.winfo_ismapped(), key)
                     self.assertGreaterEqual(widget.winfo_rootx(), left, key)
                     self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(), right, key)
+
+    def test_transport_stays_visible_above_scrolling_parameters(self):
+        app = self.app
+        for size in ("1240x880", "900x650"):
+            app.geometry(size)
+            app.update()
+            buttons = [widget for widget, key in app._text_bindings
+                       if key in ("start", "pause", "stop", "resonance")]
+            before = [(button.winfo_rootx(), button.winfo_rooty()) for button in buttons]
+            app.sidebar.canvas.yview_moveto(1)
+            app.update()
+            scroll = app.sidebar.canvas.yview()
+            app.start_button.focus_force()
+            app.update()
+            self.assertEqual(scroll, app.sidebar.canvas.yview())
+            self.assertEqual(before, [(b.winfo_rootx(), b.winfo_rooty()) for b in buttons])
+            for button in buttons:
+                self.assertGreaterEqual(button.winfo_rooty(), app.sidebar.winfo_rooty())
+                self.assertLessEqual(button.winfo_rooty()+button.winfo_height(), app.sidebar.canvas.winfo_rooty())
+
+    def test_resonance_button_recovers_all_parameters_and_reproduces_trajectory(self):
+        app = self.app
+        app.parameters = Parameters(T=1.1, a=0, b=0, drive_enabled=False,
+                                    f=0, omega=.02, gamma=3, dt=.04, seed=99)
+        app._sync_parameter_widgets()
+        app.reset_model()
+        app.advance_steps(50)
+        app._slider_changed("b", "0")
+        app.parameter_vars["T"].set("invalid")
+        app.notice_label.configure(text=app.tr("error"))
+        app.resonance_button.invoke()
+        self.assertTrue(app.running)
+        app.pause()
+        self.assertEqual(app.current_page, "lab")
+        self.assertEqual(app.parameters, RESONANCE_PARAMETERS)
+        self.assertEqual(app.speed, DEMONSTRATION_SPEED)
+        self.assertIsNone(app._pending_apply)
+        self.assertEqual(app.notice_label.cget("text"), "")
+        self.assertEqual(app.model.t, 0)
+        self.assertEqual(len(app.history), 1)
+        for name, variable in app.parameter_vars.items():
+            self.assertEqual(float(variable.get()), getattr(RESONANCE_PARAMETERS, name))
+        self.assertTrue(app.drive_var.get())
+        self.assertEqual(str(app.parameter_entries["f"].cget("state")), "normal")
+        app.advance_steps(1000)
+        before = self.snapshot()
+        app.resonance_button.invoke()
+        app.pause()
+        app.advance_steps(1000)
+        self.assertEqual(before, self.snapshot())
+
+    def test_large_button_text_fits_on_both_languages_at_minimum_window(self):
+        app = self.app
+        app.geometry("900x650")
+        style = ttk.Style(app)
+        for page in ("lab", "home"):
+            app.show_page(page)
+            for language in ("ru", "en"):
+                app.language = language
+                app._translate()
+                app.update()
+                buttons = [(widget, key) for widget, key in app._text_bindings
+                           if isinstance(widget, (ttk.Button, ttk.Checkbutton))]
+                buttons.append((app.language_button, "language"))
+                for button, key in buttons:
+                    if not button.winfo_ismapped():
+                        continue
+                    name = button.cget("style") or button.winfo_class()
+                    font = tkfont.Font(font=style.lookup(name, "font"))
+                    self.assertGreater(font.actual()["size"], appearance.BODY_FONT_SIZE, key)
+                    self.assertGreaterEqual(button.winfo_width(), font.measure(button.cget("text"))+20, key)
+                    self.assertGreaterEqual(button.winfo_rootx(), app.winfo_rootx(), key)
+                    self.assertLessEqual(button.winfo_rootx()+button.winfo_width(), app.winfo_rootx()+app.winfo_width(), key)
+
+    def test_longer_window_is_immediately_available_on_pause_and_preserves_state(self):
+        app = self.app
+        app.parameters = RESONANCE_PARAMETERS
+        app._sync_parameter_widgets()
+        app.reset_model()
+        period = 2*math.pi/app.parameters.omega
+        app.advance_steps(math.ceil(8*period/app.parameters.dt))
+        # Несмотря на выбранные 3 периода, в буфере уже есть последние 6.
+        self.assertEqual(app.history_periods, 3)
+        self.assertGreaterEqual(app.history[0].t, app.model.t-6*period)
+        self.assertLess(app.history[0].t, app.model.t-5.9*period)
+        self.assertLessEqual(len(app.history), math.ceil(6*period/(5*app.parameters.dt))+1)
+        before = self.snapshot()
+        for periods in (6, 3, 6):
+            app.history_box.current(appearance.HISTORY_PERIOD_OPTIONS.index(periods))
+            app.history_box.event_generate("<<ComboboxSelected>>")
+            app.update()
+            self.assertEqual(app.history_periods, periods)
+            self.assertFalse(app.running)
+            self.assertEqual(before, self.snapshot())
+        app.rotate()
+        app.set_scheme("states")
+        app.toggle_language()
+        app.update()
+        self.assertEqual(app.history_box.get(), "6 driving periods")
+        self.assertEqual(app.history_periods, 6)
+        self.assertEqual(before, self.snapshot())
 
     def test_scheme_and_rotation_preserve_history(self):
         app = self.app
@@ -228,9 +333,9 @@ runpy.run_path('main.py', run_name='__main__')
     def test_removed_helpers_and_export_actions_are_absent(self):
         app = self.app
         removed = {"scroll_hint", "reset_hint", "units", "vertical", "horizontal",
-                   "export_csv", "export_svg", "thermal", "barrier"}
+                   "export_csv", "export_svg", "thermal", "barrier", "seed"}
         self.assertTrue(removed.isdisjoint(key for widget, key in app._text_bindings))
-        for name in ("thermal_label", "barrier_label", "axis_hint", "save_csv", "save_svg", "export_csv", "export_svg"):
+        for name in ("thermal_label", "barrier_label", "axis_hint", "save_csv", "save_svg", "export_csv", "export_svg", "seed_var"):
             self.assertFalse(hasattr(app, name), name)
         for language in ("ru", "en"):
             app.language = language

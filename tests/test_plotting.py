@@ -120,6 +120,24 @@ class PlotTests(unittest.TestCase):
         trajectory_scene(self.parameters, 0, [self.samples[0]], 700, 320, 'quantities')
         self.assertEqual(before, self.samples)
 
+    def test_six_period_window_displays_older_samples_without_changing_them(self):
+        parameters = Parameters(omega=.08, drive_enabled=False)
+        period = 2*math.pi/parameters.omega
+        time = 8*period
+        samples = [Sample(index*period/20, math.sin(index), 0, 0) for index in range(161)]
+        before = list(samples)
+        for vertical in (True, False):
+            for periods in (3, 6):
+                low, high = _time_window(parameters, time, periods)
+                self.assertAlmostEqual(high-low, periods*period)
+                scene = trajectory_scene(parameters, time, samples, 700, 320, "quantities", vertical,
+                                         periods=periods)
+                lines = [item for item in scene.primitives
+                         if item.kind == "line" and item.color == "#245b86"]
+                self.assertEqual(len(lines), 1)
+                expected = [sample for sample in samples if low <= sample.t <= high]
+                self.assertEqual(len(lines[0].coordinates), 2*len(expected))
+        self.assertEqual(samples, before)
 
 if __name__ == '__main__':
     unittest.main()

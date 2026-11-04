@@ -14,6 +14,7 @@ from tkinter import ttk
 from . import appearance as visual
 from .model import Model, Parameters, PARAMETER_LIMITS
 from .plotting import ViewLimits, potential_scene, title_scene, trajectory_scene
+from .presets import DEMONSTRATION_SPEED, RESONANCE_PARAMETERS
 from .texts import EN, RU, THEORY_PLACEHOLDER
 
 
@@ -32,13 +33,17 @@ class ScrollablePanel(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent, style="Panel.TFrame")
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
+        # Управление расчётом остаётся сверху при любой прокрутке параметров.
+        self.toolbar = ttk.Frame(self, padding=(visual.PANEL_PADDING, 12, visual.PANEL_PADDING, 0),
+                                 style="Panel.TFrame")
+        self.toolbar.grid(row=0, column=0, columnspan=2, sticky="ew")
         self.canvas = tk.Canvas(self, width=visual.SIDEBAR_WIDTH, highlightthickness=0,
                                 background=visual.UI_COLORS["panel"])
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=scrollbar.set)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.canvas.grid(row=1, column=0, sticky="nsew")
+        scrollbar.grid(row=1, column=1, sticky="ns")
         self.content = ttk.Frame(self.canvas, padding=visual.PANEL_PADDING, style="Panel.TFrame")
         self.window = self.canvas.create_window(0, 0, window=self.content, anchor="nw")
         self.content.bind("<Configure>", self._update_region)
@@ -50,9 +55,10 @@ class ScrollablePanel(ttk.Frame):
     def _update_width(self, event):
         self.canvas.itemconfigure(self.window, width=event.width)
 
-    def contains(self, widget):
+    def contains(self, widget, parent=None):
+        parent = self if parent is None else parent
         while widget is not None:
-            if widget is self:
+            if widget is parent:
                 return True
             widget = getattr(widget, "master", None)
         return False
@@ -60,7 +66,7 @@ class ScrollablePanel(ttk.Frame):
     def reveal_focus(self, event):
         """При переходе Tab выбранное поле остаётся видимым в панели."""
         widget = event.widget
-        if not self.contains(widget) or widget is self.canvas:
+        if not self.contains(widget, self.content):
             return
         self.update_idletasks()
         top = self.canvas.canvasy(0)
@@ -106,13 +112,14 @@ class Application(tk.Tk):
         self.language = "ru"
         self.scheme = "quantities"
         self.vertical = True
+        self.history_periods = visual.DEFAULT_HISTORY_PERIODS
         self.running = False
         self.current_page = "home"
-        self.parameters = Parameters()
+        self.parameters = RESONANCE_PARAMETERS
         self.model = Model(self.parameters)
         self.view_limits = ViewLimits()
         self.history = deque([self.model.sample()])
-        self.speed = "slow"
+        self.speed = DEMONSTRATION_SPEED
         self._last_clock = time.monotonic()
         self._fractional_steps = 0.0
         self._pending_apply = None
@@ -139,7 +146,8 @@ class Application(tk.Tk):
         self.bind_all("<FocusIn>", self.sidebar.reveal_focus)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self._translate()
-        self.show_page("home")
+        self.show_page("lab")
+        self.start()
         self.after(FRAME_MILLISECONDS, self._tick)
 
     def tr(self, key):
@@ -162,10 +170,11 @@ class Application(tk.Tk):
                         font=(visual.FONT_FAMILY, visual.SMALL_FONT_SIZE))
         style.configure("Title.TLabel", font=(visual.FONT_FAMILY, visual.TITLE_FONT_SIZE, "bold"))
         style.configure("Heading.TLabel", font=(visual.FONT_FAMILY, visual.HEADING_FONT_SIZE, "bold"))
-        style.configure("TButton", padding=(9, 7), background=colors["button"])
+        button_font = (visual.FONT_FAMILY, visual.BUTTON_FONT_SIZE)
+        style.configure("TButton", padding=(9, 7), background=colors["button"], font=button_font)
         style.configure("Compact.TButton", padding=(4, 7),
-                        font=(visual.FONT_FAMILY, visual.SMALL_FONT_SIZE))
-        style.configure("Panel.TCheckbutton", background=colors["panel"])
+                        font=button_font)
+        style.configure("Panel.TCheckbutton", background=colors["panel"], font=button_font)
         style.map("TButton", background=[("active", "#e6edf4")])
         style.configure("TEntry", fieldbackground="white")
         style.configure("TCombobox", fieldbackground="white")
@@ -197,8 +206,12 @@ class Application(tk.Tk):
         self.language_button.grid(row=0, column=1, sticky="e")
         self.navigation = ttk.Frame(self, padding=(20, 4))
         self.navigation.grid(row=1, column=0, sticky="ew")
+        button_font = tkfont.Font(family=visual.FONT_FAMILY, size=visual.BUTTON_FONT_SIZE)
         for index, name in enumerate(("home", "lab", "theory", "authors")):
-            self._button(self.navigation, name, lambda page=name: self.show_page(page), width=14).grid(row=0, column=index, padx=(0, 8))
+            # Ширина учитывает оба перевода: крупный текст помещается без скачка RU/EN.
+            text_width = max(button_font.measure(RU[name]), button_font.measure(EN[name]))
+            width = math.ceil(text_width/button_font.measure("0")) + 1
+            self._button(self.navigation, name, lambda page=name: self.show_page(page), width=width).grid(row=0, column=index, padx=(0, 8))
         self.navigation.columnconfigure(4, weight=1)
         self._button(self.navigation, "exit", self.destroy).grid(row=0, column=5, sticky="e")
 
@@ -230,9 +243,19 @@ class Application(tk.Tk):
         page.rowconfigure(0, weight=1)
         self.sidebar = ScrollablePanel(page)
         self.sidebar.grid(row=0, column=0, sticky="ns", padx=(0, 18))
+        toolbar = self.sidebar.toolbar
+        self._label(toolbar, "parameters", style="PanelHeading.TLabel").pack(anchor="w", pady=(0, 10))
+        self.start_button = self._button(toolbar, "start", self.start)
+        self.start_button.pack(fill="x", pady=(0, 6))
+        transport = ttk.Frame(toolbar, style="Panel.TFrame")
+        transport.pack(fill="x", pady=(0, 6))
+        self.pause_button = self._button(transport, "pause", self.pause, width=1)
+        self.pause_button.pack(side="left", expand=True, fill="x", padx=(0, 3))
+        self._button(transport, "stop", self.stop, width=1).pack(side="left", expand=True, fill="x", padx=(3, 0))
+        self.resonance_button = self._button(toolbar, "resonance", self.set_resonance)
+        self.resonance_button.pack(fill="x", pady=(0, 4))
         controls = self.sidebar.content
         controls.columnconfigure(0, weight=1)
-        self._label(controls, "parameters", style="PanelHeading.TLabel").pack(anchor="w", pady=(0, 12))
         self.parameter_vars = {}
         self.parameter_entries = {}
         self.parameter_scales = {}
@@ -258,17 +281,15 @@ class Application(tk.Tk):
         self.drive_button = self._bind_text(ttk.Checkbutton(controls, variable=self.drive_var,
                                         command=self.apply_parameters, style="Panel.TCheckbutton"), "drive")
         self.drive_button.pack(anchor="w", pady=(6, 12))
-        self._label(controls, "seed", style="Panel.TLabel").pack(anchor="w")
-        self.seed_var = tk.StringVar(value=str(self.parameters.seed))
-        seed_entry = ttk.Entry(controls, textvariable=self.seed_var)
-        seed_entry.pack(fill="x", pady=(4, 12))
-        seed_entry.bind("<Return>", self.apply_parameters)
-        seed_entry.bind("<FocusOut>", self.apply_parameters)
         presets = ttk.Frame(controls, style="Panel.TFrame")
         presets.pack(fill="x", pady=(0, 14))
-        for key, value in (("low", .025), ("medium", .22), ("high", 1.1)):
+        for key, value in (("low", .025), ("medium", RESONANCE_PARAMETERS.T), ("high", 1.1)):
             self._button(presets, key, lambda temperature=value: self.set_temperature(temperature),
-                         width=1, style="Compact.TButton").pack(side="left", expand=True, fill="x")
+                         width=1, style="Compact.TButton").pack(fill="x", pady=2)
+        self._label(controls, "history_window", style="Panel.TLabel").pack(anchor="w")
+        self.history_box = ttk.Combobox(controls, state="readonly")
+        self.history_box.pack(fill="x", pady=(4, 14))
+        self.history_box.bind("<<ComboboxSelected>>", self._history_selected)
         self._label(controls, "appearance", style="Panel.TLabel").pack(anchor="w")
         self.scheme_box = ttk.Combobox(controls, state="readonly")
         self.scheme_box.pack(fill="x", pady=(4, 14))
@@ -279,16 +300,9 @@ class Application(tk.Tk):
         self.speed_box.bind("<<ComboboxSelected>>", self._speed_selected)
         # Перехватываем колёсико до стандартного обработчика Combobox:
         # прокрутка панели не должна незаметно менять цвет или скорость.
-        for box in (self.scheme_box, self.speed_box):
+        for box in (self.scheme_box, self.speed_box, self.history_box):
             for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
                 box.bind(sequence, self.sidebar.scroll_mouse)
-        transport = ttk.Frame(controls, style="Panel.TFrame")
-        transport.pack(fill="x", pady=(0, 12))
-        for key, command in (("start", self.start), ("pause", self.pause), ("stop", self.stop)):
-            button = self._button(transport, key, command, width=1)
-            button.pack(side="left", expand=True, fill="x")
-            if key == "pause":
-                self.pause_button = button
         self.notice_label = ttk.Label(controls, style="Hint.TLabel", wraplength=260)
         self.notice_label.pack(fill="x")
         # Эта колонка не входит в прокручиваемую область.
@@ -351,6 +365,8 @@ class Application(tk.Tk):
         self.scheme_box.current(list(visual.SCHEMES).index(self.scheme))
         self.speed_box.configure(values=[self.tr("slow"), self.tr("fast")])
         self.speed_box.current(0 if self.speed == "slow" else 1)
+        self.history_box.configure(values=[self.tr(f"history_{count}") for count in visual.HISTORY_PERIOD_OPTIONS])
+        self.history_box.current(visual.HISTORY_PERIOD_OPTIONS.index(self.history_periods))
         self._update_labels()
         self.sidebar.canvas.yview_moveto(scroll_position)
         self.request_draw()
@@ -384,8 +400,6 @@ class Application(tk.Tk):
                 value = getattr(self.parameters, name)
                 variable.set(f"{value:g}")
                 self.parameter_scales[name].set(value)
-            if hasattr(self, "seed_var"):
-                self.seed_var.set(str(self.parameters.seed))
             if hasattr(self, "drive_var"):
                 self.drive_var.set(self.parameters.drive_enabled)
         finally:
@@ -407,7 +421,7 @@ class Application(tk.Tk):
         try:
             values = {name: float(variable.get().replace(",", "."))
                       for name, variable in self.parameter_vars.items()}
-            candidate = Parameters(**values, seed=int(self.seed_var.get()),
+            candidate = Parameters(**values, seed=self.parameters.seed, dt=self.parameters.dt,
                                    drive_enabled=self.drive_var.get())
         except (ValueError, OverflowError):
             self.notice_label.configure(text=self.tr("invalid"))
@@ -424,6 +438,19 @@ class Application(tk.Tk):
         self.parameter_vars["T"].set(str(value))
         self.apply_parameters()
 
+    def set_resonance(self):
+        """Восстановить весь показательный режим даже после неверного ввода."""
+        if self._pending_apply is not None:
+            self.after_cancel(self._pending_apply)
+            self._pending_apply = None
+        self.running = False
+        self.parameters = RESONANCE_PARAMETERS
+        self.speed = DEMONSTRATION_SPEED
+        self.speed_box.current(1 if self.speed == "fast" else 0)
+        self._sync_parameter_widgets()
+        self.reset_model()
+        self.start()
+
     def set_scheme(self, key):
         if key not in visual.SCHEMES:
             raise ValueError(key)
@@ -436,6 +463,17 @@ class Application(tk.Tk):
 
     def _speed_selected(self, _event=None):
         self.speed = "slow" if self.speed_box.current() == 0 else "fast"
+
+    def set_history_periods(self, periods):
+        """Меняет только окно рисунка: расчёт, пауза и история сохраняются."""
+        if periods not in visual.HISTORY_PERIOD_OPTIONS:
+            raise ValueError(periods)
+        self.history_periods = periods
+        self.history_box.current(visual.HISTORY_PERIOD_OPTIONS.index(periods))
+        self.request_draw()
+
+    def _history_selected(self, _event=None):
+        self.set_history_periods(visual.HISTORY_PERIOD_OPTIONS[self.history_box.current()])
 
     def start(self):
         if self.apply_parameters():
@@ -471,7 +509,8 @@ class Application(tk.Tk):
             self.model.step()
             if self.model.steps % SAMPLES_EVERY_STEPS == 0:
                 self.history.append(self.model.sample())
-        cutoff = self.model.t - 6 * math.pi / self.parameters.omega
+        # Храним максимальное окно: расширить график можно сразу, даже на паузе.
+        cutoff = self.model.t - max(visual.HISTORY_PERIOD_OPTIONS)*2*math.pi/self.parameters.omega
         while len(self.history) > 1 and self.history[0].t < cutoff:
             self.history.popleft()
 
@@ -518,7 +557,8 @@ class Application(tk.Tk):
                         max(200, self.title_canvas.winfo_height()), self.scheme).draw(self.title_canvas)
         elif self.current_page == "lab":
             # Добавляем текущую точку только в рисунок; история модели не меняется.
-            visible = list(self.history)
+            cutoff = self.model.t - self.history_periods*2*math.pi/self.parameters.omega
+            visible = [sample for sample in self.history if sample.t >= cutoff]
             if not visible or visible[-1].t != self.model.t:
                 visible.append(self.model.sample())
             self.view_limits.update(self.parameters, visible, self.model.x)
@@ -529,7 +569,7 @@ class Application(tk.Tk):
                 trajectory_scene(self.parameters, self.model.t, visible,
                                  max(300, self.trajectory_canvas.winfo_width()),
                                  max(180, self.trajectory_canvas.winfo_height()), self.scheme,
-                                 self.vertical, self.language, self.view_limits),
+                                 self.vertical, self.language, self.view_limits, periods=self.history_periods),
             ]
             for scene, canvas in zip(self._scenes, (self.potential_canvas, self.trajectory_canvas)):
                 scene.draw(canvas)
