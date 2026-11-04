@@ -48,6 +48,7 @@ class InterfaceTests(unittest.TestCase):
         app.reset_model()
         app._translate()
         app.show_page("lab")
+        app.pause()
         app.sidebar.canvas.yview_moveto(0)
         app.update()
 
@@ -74,6 +75,7 @@ class InterfaceTests(unittest.TestCase):
             app.update()
             check_frame(app.title_canvas)
             app.show_page("lab")
+            app.pause()
             app.advance_steps(1000)
             app.update()
             check_frame(app.potential_canvas)
@@ -106,6 +108,32 @@ runpy.run_path('main.py', run_name='__main__')
                                 capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("nonblank home illustration and both graph frames", result.stdout)
+
+    def test_entering_demonstration_starts_at_1x_and_return_preserves_state(self):
+        app = self.app
+        app.show_page("home")
+        app.speed = DEMONSTRATION_SPEED
+        app._translate()
+        before = self.snapshot()
+        self.assertFalse(app.running)
+        app.show_page("lab")
+        self.assertTrue(app.running)
+        self.assertEqual(app.speed, "slow")
+        app.pause()
+        self.assertEqual(before, self.snapshot())
+        app.advance_steps(100)
+        before = self.snapshot()
+        app.show_page("authors")
+        self.assertFalse(app.running)
+        app.show_page("lab")
+        self.assertTrue(app.running)
+        app.pause()
+        self.assertEqual(before, self.snapshot())
+        app.speed = "fast"
+        app.show_page("home")
+        app.show_page("lab")
+        self.assertEqual(app.speed, "fast")
+        app.pause()
 
     def test_sidebar_scroll_does_not_move_plots_or_reset_simulation(self):
         app = self.app
@@ -360,6 +388,7 @@ runpy.run_path('main.py', run_name='__main__')
             for page, canvases in (("home", (app.title_canvas,)),
                                    ("lab", (app.potential_canvas, app.trajectory_canvas))):
                 app.show_page(page)
+                app.pause()
                 app.language = "en"
                 app._translate()
                 app.update()

@@ -146,8 +146,7 @@ class Application(tk.Tk):
         self.bind_all("<FocusIn>", self.sidebar.reveal_focus)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self._translate()
-        self.show_page("lab")
-        self.start()
+        self.show_page("home")
         self.after(FRAME_MILLISECONDS, self._tick)
 
     def tr(self, key):
@@ -376,6 +375,7 @@ class Application(tk.Tk):
         self._translate()
 
     def show_page(self, name):
+        entering_lab = name == "lab" and self.current_page != "lab"
         if name != "lab":
             self.running = False
         self.current_page = name
@@ -391,6 +391,8 @@ class Application(tk.Tk):
             self.navigation.grid()
             self.brand.grid()
         self._update_labels()
+        if entering_lab:
+            self.start()
         self.request_draw()
 
     def _sync_parameter_widgets(self):

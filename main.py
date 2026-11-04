@@ -52,24 +52,26 @@ def main() -> None:
 
         def check_home():
             try:
+                if application.current_page != "home" or application.running or application.model.t != 0:
+                    raise RuntimeError("Application did not open on the idle home screen")
                 check_frame(application.title_canvas)
             except Exception as error:
                 errors.append(str(error))
             application.show_page("lab")
-            application.advance_steps(1000)
-            application.after(250, finish_check)
+            application.after(250, check_automatic_start)
 
         def check_automatic_start():
             try:
                 if application.current_page != "lab" or not application.running or application.model.t <= 0:
                     raise RuntimeError("Demonstration did not start automatically")
+                if application.speed != "slow":
+                    raise RuntimeError("Demonstration did not start at 1x speed")
                 for canvas in (application.potential_canvas, application.trajectory_canvas):
                     check_frame(canvas)
             except Exception as error:
                 errors.append(str(error))
             application.pause()
-            application.show_page("home")
-            application.after(250, check_home)
+            application.after(250, finish_check)
 
         def finish_check():
             try:
@@ -80,7 +82,7 @@ def main() -> None:
             finally:
                 application.destroy()
 
-        application.after(250, check_automatic_start)
+        application.after(250, check_home)
         application.mainloop()
         if errors:
             raise RuntimeError("; ".join(errors))

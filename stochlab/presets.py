@@ -9,4 +9,4 @@ RESONANCE_PARAMETERS = Parameters(
     T=0.35, a=1.0, b=0.5, f=0.24, omega=0.08, gamma=1.0,
     drive_enabled=True, dt=0.02, seed=42,
 )
-DEMONSTRATION_SPEED = "fast"
+DEMONSTRATION_SPEED = "slow"
