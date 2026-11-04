@@ -199,7 +199,7 @@ class Application(tk.Tk):
         self.header = ttk.Frame(self, padding=(20, 8))
         self.header.grid(row=0, column=0, sticky="ew")
         self.header.columnconfigure(0, weight=1)
-        self.brand = self._label(self.header, "title")
+        self.brand = self._label(self.header, "title", style="Section.TLabel")
         self.brand.grid(row=0, column=0, sticky="w")
         self.language_button = ttk.Button(self.header, width=5, command=self.toggle_language)
         self.language_button.grid(row=0, column=1, sticky="e")
