@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 import math
 
 from .appearance import (
-    ColorScheme, FONT_FAMILY, FORCE_LINE_WIDTH, GRID_LINE_WIDTH,
+    ColorScheme, DEFAULT_HISTORY_PERIODS, FONT_FAMILY, FORCE_LINE_WIDTH, GRID_LINE_WIDTH,
+    HISTORY_PERIOD_OPTIONS,
     PARTICLE_RADIUS, PLOT_BOTTOM_MARGIN, PLOT_FONT_SIZE, PLOT_LEFT_MARGIN,
     PLOT_LINE_WIDTH, PLOT_RIGHT_MARGIN, PLOT_TOP_MARGIN, get_scheme,
 )
@@ -132,13 +133,15 @@ def _axes(scene, xmin, xmax, ymin, ymax, xlabel, ylabel, palette,
     return axes
 
 
-def _time_window(parameters, time):
+def _time_window(parameters, time, periods=DEFAULT_HISTORY_PERIODS):
     """Ленточная развёртка: все старые точки сдвигаются с одной скоростью.
 
-    Ширина равна трём периодам уже с первого кадра. Пока история короткая,
+    Ширина равна выбранному числу периодов уже с первого кадра. Пока история короткая,
     оставшаяся часть окна пуста; вычислений для отрицательного времени нет.
     """
-    span = 6*math.pi/parameters.omega
+    if periods not in HISTORY_PERIOD_OPTIONS:
+        raise ValueError("Неподдерживаемое число периодов временного окна")
+    span = periods*2*math.pi/parameters.omega
     return time-span, time
 
 
@@ -295,12 +298,13 @@ def potential_scene(parameters, time, position, history, width, height, scheme, 
     return scene
 
 
-def trajectory_scene(parameters, time, history, width, height, scheme, vertical=True, language="ru", view_limits=None):
+def trajectory_scene(parameters, time, history, width, height, scheme, vertical=True, language="ru", view_limits=None,
+                     periods=DEFAULT_HISTORY_PERIODS):
     """Координата и сила; время направлено вверх либо вправо."""
     palette = get_scheme(scheme)
     scene = Scene(max(width, 220), max(height, 170), palette.background)
     extent = view_limits.extent if view_limits else _horizontal_extent(parameters, history)
-    start, end = _time_window(parameters, time)
+    start, end = _time_window(parameters, time, periods)
     # Каждая сохранённая точка участвует в рисунке. Добавление новых точек
     # больше не меняет выбор старых точек и не создаёт рябь от прореживания.
     samples = [sample for sample in history if start <= sample.t <= end]

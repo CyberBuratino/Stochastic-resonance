@@ -59,6 +59,18 @@ def main() -> None:
             application.advance_steps(1000)
             application.after(250, finish_check)
 
+        def check_automatic_start():
+            try:
+                if application.current_page != "lab" or not application.running or application.model.t <= 0:
+                    raise RuntimeError("Demonstration did not start automatically")
+                for canvas in (application.potential_canvas, application.trajectory_canvas):
+                    check_frame(canvas)
+            except Exception as error:
+                errors.append(str(error))
+            application.pause()
+            application.show_page("home")
+            application.after(250, check_home)
+
         def finish_check():
             try:
                 for canvas in (application.potential_canvas, application.trajectory_canvas):
@@ -68,11 +80,11 @@ def main() -> None:
             finally:
                 application.destroy()
 
-        application.after(250, check_home)
+        application.after(250, check_automatic_start)
         application.mainloop()
         if errors:
             raise RuntimeError("; ".join(errors))
-        print("OK: GUI, nonblank home illustration and both graph frames")
+        print("OK: GUI, nonblank home illustration and both graph frames; automatic simulation start")
         return
     application.mainloop()
 
