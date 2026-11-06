@@ -208,7 +208,7 @@ runpy.run_path('main.py', run_name='__main__')
             app.geometry(size)
             app.update()
             buttons = [widget for widget, key in app._text_bindings
-                       if key in ("start", "pause", "stop", "resonance")]
+                       if key in ("start", "pause", "stop", "resonance", "rotate")]
             before = [(button.winfo_rootx(), button.winfo_rooty()) for button in buttons]
             app.sidebar.canvas.yview_moveto(1)
             app.update()
@@ -378,7 +378,35 @@ runpy.run_path('main.py', run_name='__main__')
             font = tkfont.Font(font=style.lookup(widget.cget("style"), "font"))
             self.assertEqual(font.actual()["weight"], "bold")
             self.assertGreater(font.actual()["size"], 12)
-            self.assertGreaterEqual(widget.winfo_width(), font.measure(widget.cget("text")), key)
+            wrap = int(widget.cget("wraplength") or 0)
+            if wrap:
+                self.assertGreaterEqual(widget.winfo_width(), max(font.measure(word) for word in widget.cget("text").split()), key)
+                lines = math.ceil(font.measure(widget.cget("text"))/wrap)
+                self.assertGreaterEqual(widget.winfo_height(), lines*font.metrics("linespace"), key)
+            else:
+                self.assertGreaterEqual(widget.winfo_width(), font.measure(widget.cget("text")), key)
+
+    def test_particle_and_current_trajectory_endpoint_share_nearby_vertical(self):
+        app = self.app
+        app.advance_steps(1000)
+        app.vertical = True
+        for size in ("1240x880", "900x650"):
+            app.geometry(size)
+            app.update()
+            potential, trajectory = app._scenes
+            particle = next(p for p in potential.primitives if p.kind == "circle")
+            current = next(p for p in trajectory.primitives if p.kind == "circle")
+            upper, lower = app.potential_canvas, app.trajectory_canvas
+            self.assertEqual(upper.winfo_width(), lower.winfo_width())
+            self.assertEqual(upper.winfo_rooty()+upper.winfo_height(), lower.winfo_rooty())
+            self.assertAlmostEqual(upper.winfo_rootx()+particle.coordinates[0],
+                                   lower.winfo_rootx()+current.coordinates[0])
+            separation = lower.winfo_rooty()+current.coordinates[1] - upper.winfo_rooty()-particle.coordinates[1]
+            self.assertGreater(separation, 0)
+            self.assertLessEqual(separation, 50)
+            caption = next(widget for widget, key in app._text_bindings if key == "trajectory")
+            self.assertTrue(app.sidebar.contains(caption, app.sidebar.toolbar))
+            self.assertGreaterEqual(trajectory.height, 260)
 
     def test_language_switch_keeps_home_and_graph_geometry(self):
         app = self.app

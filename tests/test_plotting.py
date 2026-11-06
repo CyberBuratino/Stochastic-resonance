@@ -1,5 +1,6 @@
 """Геометрия графиков: неизменность данных, оси и непрерывная развёртка."""
 import math
+from dataclasses import replace
 import unittest
 
 from stochlab.appearance import get_scheme
@@ -41,6 +42,42 @@ class PlotTests(unittest.TestCase):
         colors = {item.color for item in scene.primitives}
         self.assertIn('#6741a5', colors)
         self.assertIn('#19734a', colors)
+
+    def test_stationary_potential_stays_fixed_while_instantaneous_curve_changes(self):
+        p = self.parameters
+        palette = get_scheme("quantities")
+        scenes = [potential_scene(p, phase/p.omega, -1, self.samples, 700, 320, "quantities")
+                  for phase in (0, math.pi/2, math.pi)]
+        reference = [[line for line in scene.primitives
+                      if line.kind == "line" and line.color == palette.axes and line.dash == (7, 5)]
+                     for scene in scenes]
+        self.assertTrue(reference[0])
+        self.assertEqual(reference[0], reference[1])
+        self.assertEqual(reference[0], reference[2])
+        solid = [[line for line in scene.primitives
+                  if line.kind == "line" and line.color == palette.coordinate and not line.dash]
+                 for scene in scenes]
+        self.assertNotEqual(solid[0], solid[1])
+        self.assertLess(scenes[0].primitives.index(reference[0][0]),
+                        scenes[0].primitives.index(solid[0][0]))
+
+    def test_stationary_potential_coincides_with_undriven_curve_in_all_palettes(self):
+        p = replace(self.parameters, drive_enabled=False)
+        for scheme in ("quantities", "states", "monochrome"):
+            palette = get_scheme(scheme)
+            scene = potential_scene(p, self.time, -1, self.samples, 700, 320, scheme)
+            reference = [line for line in scene.primitives
+                         if line.kind == "line" and line.color == palette.axes and line.dash == (7, 5)]
+            self.assertTrue(reference)
+            # Цветовая схема состояний разбивает сплошную кривую в x=0.
+            if scheme != "states":
+                solid = [line for line in scene.primitives
+                         if line.kind == "line" and line.color == palette.coordinate and not line.dash]
+                self.assertEqual([line.coordinates for line in reference],
+                                 [line.coordinates for line in solid])
+            if scheme == "monochrome":
+                self.assertEqual(palette.axes[1:3], palette.axes[3:5])
+                self.assertEqual(palette.axes[3:5], palette.axes[5:7])
 
     def test_zero_time_flat_potential_and_plain_axis_labels(self):
         parameters = Parameters(a=0, b=0)
@@ -119,6 +156,53 @@ class PlotTests(unittest.TestCase):
         before = list(self.samples)
         trajectory_scene(self.parameters, 0, [self.samples[0]], 700, 320, 'quantities')
         self.assertEqual(before, self.samples)
+
+    def test_particle_projection_matches_current_endpoint_and_rotation_is_unambiguous(self):
+        time = 100
+        current = Sample(time, .75, 0, 0)
+        history = [Sample(0, -1, 0, 0), current]
+        limits = ViewLimits()
+        limits.update(self.parameters, history, current.x)
+        before = list(history)
+        for vertical in (True, False):
+            potential = potential_scene(self.parameters, time, current.x, history, 700, 200,
+                                        "quantities", view_limits=limits, connect_trajectory=vertical)
+            trajectory = trajectory_scene(self.parameters, time, history, 700, 320, "quantities",
+                                          vertical, view_limits=limits)
+            particle = next(item for item in potential.primitives if item.kind == "circle")
+            marker = next(item for item in trajectory.primitives if item.kind == "circle")
+            lines = [item for item in trajectory.primitives
+                     if item.kind == "line" and item.color == "#245b86"]
+            self.assertEqual(lines[-1].coordinates[-2:], marker.coordinates[:2])
+            self.assertEqual(marker.color, particle.color)
+            guide = [item for item in trajectory.primitives if item.kind == "line" and item.dash == (4, 4)]
+            upper = next(item for item in potential.primitives if item.kind == "line" and item.dash == (4, 4))
+            if vertical:
+                self.assertEqual(particle.coordinates[0], marker.coordinates[0])
+                self.assertEqual(len(guide), 1)
+                self.assertEqual(guide[0].coordinates, (marker.coordinates[0], 0, *marker.coordinates[:2]))
+                self.assertEqual(upper.coordinates[-1], potential.height)
+                self.assertLessEqual(potential.height-particle.coordinates[1]+marker.coordinates[1], 50)
+            else:
+                self.assertEqual(guide, [])
+                self.assertEqual(upper.coordinates[-1], particle.coordinates[1])
+        self.assertEqual(history, before)
+
+    def test_projection_has_clearance_around_axis_numbers_at_zero(self):
+        current = Sample(100, 0, 0, 0)
+        history = [Sample(0, -1, 0, 0), current]
+        scenes = [potential_scene(self.parameters, 100, 0, history, 700, 200, "quantities"),
+                  trajectory_scene(self.parameters, 100, history, 700, 320, "quantities")]
+        for scene in scenes:
+            zero = min((item for item in scene.primitives
+                        if item.kind == "text" and item.text == "0" and item.anchor == "center"),
+                       key=lambda item: item.coordinates[1])
+            guides = [item for item in scene.primitives if item.kind == "line" and item.dash == (4, 4)]
+            self.assertTrue(guides)
+            for guide in guides:
+                low, high = sorted(guide.coordinates[1::2])
+                self.assertTrue(high < zero.coordinates[1]-zero.font_size/2
+                                or low > zero.coordinates[1]+zero.font_size/2)
 
     def test_six_period_window_displays_older_samples_without_changing_them(self):
         parameters = Parameters(omega=.08, drive_enabled=False)

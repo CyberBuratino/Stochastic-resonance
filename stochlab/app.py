@@ -162,6 +162,8 @@ class Application(tk.Tk):
         style.configure("TLabel", background=colors["background"])
         style.configure("Panel.TFrame", background=colors["panel"])
         style.configure("Panel.TLabel", background=colors["panel"])
+        style.configure("Parameter.TLabel", background=colors["panel"],
+                        font=(visual.FONT_FAMILY, visual.PARAMETER_FONT_SIZE))
         section_font = (visual.FONT_FAMILY, visual.BODY_FONT_SIZE + 2, "bold")
         style.configure("Section.TLabel", font=section_font)
         style.configure("PanelHeading.TLabel", background=colors["panel"], font=section_font)
@@ -173,7 +175,8 @@ class Application(tk.Tk):
         style.configure("TButton", padding=(9, 7), background=colors["button"], font=button_font)
         style.configure("Compact.TButton", padding=(4, 7),
                         font=button_font)
-        style.configure("Panel.TCheckbutton", background=colors["panel"], font=button_font)
+        style.configure("Panel.TCheckbutton", background=colors["panel"],
+                        font=(visual.FONT_FAMILY, visual.PARAMETER_FONT_SIZE))
         style.map("TButton", background=[("active", "#e6edf4")])
         style.configure("TEntry", fieldbackground="white")
         style.configure("TCombobox", fieldbackground="white")
@@ -253,6 +256,9 @@ class Application(tk.Tk):
         self._button(transport, "stop", self.stop, width=1).pack(side="left", expand=True, fill="x", padx=(3, 0))
         self.resonance_button = self._button(toolbar, "resonance", self.set_resonance)
         self.resonance_button.pack(fill="x", pady=(0, 4))
+        self._label(toolbar, "trajectory", style="PanelHeading.TLabel",
+                    wraplength=visual.SIDEBAR_WIDTH-2*visual.PANEL_PADDING).pack(anchor="w", pady=(10, 6))
+        self._button(toolbar, "rotate", self.rotate).pack(fill="x", pady=(0, 6))
         controls = self.sidebar.content
         controls.columnconfigure(0, weight=1)
         self.parameter_vars = {}
@@ -261,7 +267,7 @@ class Application(tk.Tk):
         for name, key, resolution in PARAMETER_FIELDS:
             group = ttk.Frame(controls, style="Panel.TFrame")
             group.pack(fill="x", pady=(0, 10))
-            self._label(group, key, style="Panel.TLabel").pack(anchor="w")
+            self._label(group, key, style="Parameter.TLabel").pack(anchor="w")
             variable = tk.StringVar(value=str(getattr(self.parameters, name)))
             entry = ttk.Entry(group, textvariable=variable, width=12)
             entry.pack(fill="x", pady=4)
@@ -285,15 +291,15 @@ class Application(tk.Tk):
         for key, value in (("low", .025), ("medium", RESONANCE_PARAMETERS.T), ("high", 1.1)):
             self._button(presets, key, lambda temperature=value: self.set_temperature(temperature),
                          width=1, style="Compact.TButton").pack(fill="x", pady=2)
-        self._label(controls, "history_window", style="Panel.TLabel").pack(anchor="w")
+        self._label(controls, "history_window", style="Parameter.TLabel").pack(anchor="w")
         self.history_box = ttk.Combobox(controls, state="readonly")
         self.history_box.pack(fill="x", pady=(4, 14))
         self.history_box.bind("<<ComboboxSelected>>", self._history_selected)
-        self._label(controls, "appearance", style="Panel.TLabel").pack(anchor="w")
+        self._label(controls, "appearance", style="Parameter.TLabel").pack(anchor="w")
         self.scheme_box = ttk.Combobox(controls, state="readonly")
         self.scheme_box.pack(fill="x", pady=(4, 14))
         self.scheme_box.bind("<<ComboboxSelected>>", self._scheme_selected)
-        self._label(controls, "speed", style="Panel.TLabel").pack(anchor="w")
+        self._label(controls, "speed", style="Parameter.TLabel").pack(anchor="w")
         self.speed_box = ttk.Combobox(controls, state="readonly")
         self.speed_box.pack(fill="x", pady=(4, 12))
         self.speed_box.bind("<<ComboboxSelected>>", self._speed_selected)
@@ -309,7 +315,7 @@ class Application(tk.Tk):
         field.grid(row=0, column=1, sticky="nsew")
         field.columnconfigure(0, weight=1)
         field.rowconfigure(2, weight=1)
-        field.rowconfigure(5, weight=2)
+        field.rowconfigure(3, weight=3)
         heading = ttk.Frame(field)
         heading.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         heading.columnconfigure(0, weight=1)
@@ -318,15 +324,10 @@ class Application(tk.Tk):
         self.status_label.grid(row=0, column=1, sticky="e")
         self.statistics_label = ttk.Label(field)
         self.statistics_label.grid(row=1, column=0, sticky="w")
-        self.potential_canvas = tk.Canvas(field, background="white", highlightthickness=0, height=200)
+        self.potential_canvas = tk.Canvas(field, background="white", highlightthickness=0, height=180)
         self.potential_canvas.grid(row=2, column=0, sticky="nsew")
-        trajectory_header = ttk.Frame(field)
-        trajectory_header.grid(row=3, column=0, sticky="ew", pady=(10, 0))
-        trajectory_header.columnconfigure(0, weight=1)
-        self._label(trajectory_header, "trajectory", style="Section.TLabel").grid(row=0, column=0, sticky="w")
-        self._button(trajectory_header, "rotate", self.rotate, width=9).grid(row=0, column=1, sticky="e")
         self.trajectory_canvas = tk.Canvas(field, background="white", highlightthickness=0, height=300)
-        self.trajectory_canvas.grid(row=5, column=0, sticky="nsew")
+        self.trajectory_canvas.grid(row=3, column=0, sticky="nsew")
         for canvas in (self.potential_canvas, self.trajectory_canvas):
             canvas.bind("<Configure>", self.request_draw)
         self._sync_parameter_widgets()
@@ -567,7 +568,8 @@ class Application(tk.Tk):
             self._scenes = [
                 potential_scene(self.parameters, self.model.t, self.model.x, visible,
                                 max(300, self.potential_canvas.winfo_width()),
-                                max(140, self.potential_canvas.winfo_height()), self.scheme, self.language, self.view_limits),
+                                max(160, self.potential_canvas.winfo_height()), self.scheme, self.language, self.view_limits,
+                                connect_trajectory=self.vertical),
                 trajectory_scene(self.parameters, self.model.t, visible,
                                  max(300, self.trajectory_canvas.winfo_width()),
                                  max(180, self.trajectory_canvas.winfo_height()), self.scheme,
