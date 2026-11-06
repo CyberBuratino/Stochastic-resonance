@@ -12,6 +12,7 @@ from .appearance import (
     ColorScheme, DEFAULT_HISTORY_PERIODS, FONT_FAMILY, FORCE_LINE_WIDTH, GRID_LINE_WIDTH,
     HISTORY_PERIOD_OPTIONS,
     PARTICLE_RADIUS, PLOT_BOTTOM_MARGIN, PLOT_FONT_SIZE, PLOT_LEFT_MARGIN,
+    PARTICLE_TRACK_INSET, POTENTIAL_TOP_MARGIN, TRAJECTORY_TOP_MARGIN,
     PLOT_LINE_WIDTH, PLOT_RIGHT_MARGIN, PLOT_TOP_MARGIN, get_scheme,
 )
 from .model import barrier_height, driving_force, potential, well_position
@@ -257,16 +258,34 @@ class ViewLimits:
             self.energy_max = max(self.energy_max, upper)
 
 
-def _legend(scene, palette, language, y=12):
-    if palette.by_state:
-        left = "x < 0" if language == "en" else "x < 0"
-        right = "x ≥ 0"
-        scene.text(scene.width/2-35, y, left, palette.left_well, anchor="n")
-        scene.text(scene.width/2+45, y, right, palette.right_well, anchor="n")
+def _vertical_guide(scene, x, start, end, color):
+    """Пунктирная проекция с просветами вокруг численных подписей осей.
+
+    Запас для ширины цифр сохраняет их читаемость, когда частица проходит
+    точно над делением. На геометрию траектории эти просветы не влияют.
+    """
+    low, high = sorted((start, end))
+    cursor = low
+    labels = sorted((item for item in scene.primitives
+                     if item.kind == "text" and item.anchor == "center"),
+                    key=lambda item: item.coordinates[1])
+    for label in labels:
+        cx, cy = label.coordinates
+        if abs(x-cx) > len(label.text)*label.font_size*.4+3:
+            continue
+        top, bottom = cy-label.font_size*.75-2, cy+label.font_size*.75+2
+        if bottom < cursor or top > high:
+            continue
+        if top > cursor:
+            scene.line((x, cursor, x, min(top, high)), color, 1, (4, 4))
+        cursor = max(cursor, bottom)
+    if cursor < high:
+        scene.line((x, cursor, x, high), color, 1, (4, 4))
 
 
-def potential_scene(parameters, time, position, history, width, height, scheme, language="ru", view_limits=None):
-    """Мгновенный потенциал и частица на горизонтальной дорожке над ним."""
+def potential_scene(parameters, time, position, history, width, height, scheme, language="ru", view_limits=None,
+                    connect_trajectory=True):
+    """Мгновенный потенциал и частица у общей границы с траекторией."""
     palette = get_scheme(scheme)
     scene = Scene(max(width, 220), max(height, 160), palette.background)
     extent = view_limits.extent if view_limits else _horizontal_extent(parameters, history, position)
@@ -277,24 +296,32 @@ def potential_scene(parameters, time, position, history, width, height, scheme, 
 
     # Кривая известна аналитически: плотность точек соответствует экрану.
     count = max(300, math.ceil(scene.width * 2))
-    points = [(-extent+2*extent*index/count, 0) for index in range(count+1)]
-    points = [(x, energy(x)) for x, _ in points]
-    lowest = min(-.1, *(point[1] for point in points))
-    highest = max(.5, barrier_height(parameters)*1.2, energy(position)+.3)
+    xs = [-extent+2*extent*index/count for index in range(count+1)]
+    stationary = [(x, potential(x, parameters)) for x in xs]
+    points = [(x, energy(x)) for x in xs]
+    # Общая шкала для U и Ueff не зависит от текущей фазы силы. Неподвижная
+    # пунктирная кривая остаётся опорой при наклоне мгновенного потенциала.
+    amplitude = parameters.f if parameters.drive_enabled else 0
+    lowest = min(-.1, *(value-abs(x)*amplitude for x, value in stationary))
+    highest = max(.5, barrier_height(parameters)*1.2,
+                  potential(position, parameters)+abs(position)*amplitude+.3)
     lowest -= .15*(highest-lowest)
     if view_limits:
         lowest, highest = view_limits.energy_min, view_limits.energy_max
-    axes = _axes(scene, -extent, extent, lowest, highest, "x", "Ueff", palette, top=66)
+    axes = _axes(scene, -extent, extent, lowest, highest, "", "Ueff", palette, top=POTENTIAL_TOP_MARGIN)
+    scene.text(scene.width-3, axes.bottom+19, "x", palette.text, anchor="e")
+    # Нейтральный пунктир одинаков во всех схемах, включая чёрно-белую.
+    # Рисуем его первым, чтобы текущая сплошная кривая оставалась отчётливой.
+    _curve(scene, axes, stationary, palette.axes, 1.5, (7, 5))
     _state_curve(scene, axes, points, [point[0] for point in points], palette)
-    track = 33
+    track = scene.height-PARTICLE_TRACK_INSET
     scene.line((axes.left, track, axes.right, track), palette.axes, 1.3)
-    scene.line((axes.x(position), track, axes.x(position), axes.y(energy(position))),
-               palette.axes, 1, (4, 4))
+    _vertical_guide(scene, axes.x(position), axes.y(energy(position)),
+                    scene.height if connect_trajectory else track, palette.axes)
     color = palette.particle
     if palette.by_state:
         color = palette.right_well if position >= 0 else palette.left_well
     scene.circle(axes.x(position), track, PARTICLE_RADIUS, color)
-    _legend(scene, palette, language)
     return scene
 
 
@@ -314,13 +341,14 @@ def trajectory_scene(parameters, time, history, width, height, scheme, vertical=
                    if end > observed_start else [])
     force_extent = max(parameters.f, .01)
     if vertical:
-        axes = _axes(scene, -extent, extent, start, end, "x", "t", palette, top=66, time_axis="y")
+        axes = _axes(scene, -extent, extent, start, end, "x", "t", palette,
+                     top=TRAJECTORY_TOP_MARGIN, time_axis="y")
         coordinate_points = [(sample.x, sample.t) for sample in samples]
         force_points = [(driving_force(t, parameters)/force_extent*extent, t) for t in force_times]
-        scene.text(scene.width-5, 12, "F", palette.force, anchor="ne")
+        scene.text(scene.width-5, TRAJECTORY_TOP_MARGIN-5, "F", palette.force, anchor="ne")
         for index in range(5):
             fraction = index/4
-            scene.text(axes.x(-extent+2*extent*fraction), 43,
+            scene.text(axes.x(-extent+2*extent*fraction), 16,
                        _format_tick(-force_extent+2*force_extent*fraction), palette.force)
     else:
         axes = _axes(scene, start, end, -extent, extent, "t", "x", palette,
@@ -330,8 +358,19 @@ def trajectory_scene(parameters, time, history, width, height, scheme, vertical=
     _state_curve(scene, axes, coordinate_points, [sample.x for sample in samples], palette)
     if parameters.drive_enabled:
         _curve(scene, axes, force_points, palette.force, FORCE_LINE_WIDTH, palette.force_dash)
-    if not vertical:
-        _legend(scene, palette, language)
+    if samples and samples[-1].t == time:
+        current = samples[-1]
+        color = palette.particle
+        if palette.by_state:
+            color = palette.right_well if current.x >= 0 else palette.left_well
+        if vertical:
+            x, y = axes.x(current.x), axes.y(time)
+            # Продолжение проекции частицы через границу двух соседних Canvas.
+            _vertical_guide(scene, x, 0, y, palette.axes)
+        else:
+            # После поворота общей вертикали x нет: отмечаем только конец линии.
+            x, y = axes.x(time), axes.y(current.x)
+        scene.circle(x, y, PARTICLE_RADIUS/2, color)
     return scene
 
 
