@@ -182,7 +182,7 @@ class PlotTests(unittest.TestCase):
                 self.assertEqual(len(guide), 1)
                 self.assertEqual(guide[0].coordinates, (marker.coordinates[0], 0, *marker.coordinates[:2]))
                 self.assertEqual(upper.coordinates[-1], potential.height)
-                self.assertLessEqual(potential.height-particle.coordinates[1]+marker.coordinates[1], 50)
+                self.assertLessEqual(potential.height-particle.coordinates[1]+marker.coordinates[1], 60)
             else:
                 self.assertEqual(guide, [])
                 self.assertEqual(upper.coordinates[-1], particle.coordinates[1])

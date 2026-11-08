@@ -1,11 +1,10 @@
 """Общие элементы титульной страницы и авторов: эмблемы и карточки.
 
-Фотографии пока заменены нейтральными плейсхолдерами. Размеры и цвета
+Фотографии загружаются из локальных файлов авторов. Размеры и цвета
 настраиваются здесь и в appearance.py, без изменения физической модели.
 """
 from pathlib import Path
 import sys
-import tkinter as tk
 from tkinter import ttk
 
 from PIL import Image, ImageOps, ImageTk
@@ -62,35 +61,35 @@ class AcademicHeader(ttk.Frame):
             widget.configure(wraplength=max(200, event.width-8))
 
 
-class PhotoPlaceholder(ttk.Frame):
-    """Пустое место под будущую фотографию без вымышленного портрета."""
+class AuthorPortrait(ttk.Label):
+    """Показывает квадратный фрагмент фото; исходный JPG не изменяется."""
 
-    def __init__(self, parent, label):
-        super().__init__(parent, style="Photo.TFrame", width=visual.AUTHOR_PHOTO_MAX,
-                         height=visual.AUTHOR_PHOTO_MAX)
-        self.pack_propagate(False)
-        label(self, "author_photo", style="Photo.TLabel", anchor="center").pack(side="bottom", fill="x", pady=(0, 8))
-        self.canvas = tk.Canvas(self, background=visual.UI_COLORS["panel"], highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True)
-        self.canvas.bind("<Configure>", self._draw)
+    def __init__(self, parent, filename):
+        super().__init__(parent, anchor="center")
+        root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+        with Image.open(root / "assets" / filename) as source:
+            self.original = ImageOps.exif_transpose(source).convert("RGB")
+        self.photo_image = None
+        self._size = None
+        self.set_size(visual.AUTHOR_PHOTO_MAX)
 
-    def _draw(self, event):
-        width, height = event.width, event.height
-        self.canvas.delete("all")
-        color = "#cbd2d9"
-        self.canvas.create_oval(width*.39, height*.16, width*.61, height*.45, fill=color, outline="")
-        self.canvas.create_arc(width*.23, height*.48, width*.77, height*1.12,
-                               start=0, extent=180, fill=color, outline="")
+    def set_size(self, size):
+        if size == self._size:
+            return
+        self._size = size
+        frame = ImageOps.fit(self.original, (size, size), Image.Resampling.LANCZOS)
+        self.photo_image = ImageTk.PhotoImage(frame, master=self)
+        self.configure(image=self.photo_image)
 
 
 class AuthorCard(ttk.Frame):
-    """Карточка автора с центрированными плейсхолдером, именем и ролью."""
+    """Карточка автора с центрированными фотографией, именем и ролью."""
 
-    def __init__(self, parent, name_key, label):
+    def __init__(self, parent, name_key, filename, label):
         super().__init__(parent, style="AuthorCard.TFrame", borderwidth=1, relief="solid")
         self.content = ttk.Frame(self)
         self.content.place(relx=.5, rely=.5, anchor="center")
-        self.photo = PhotoPlaceholder(self.content, label)
+        self.photo = AuthorPortrait(self.content, filename)
         self.photo.pack(pady=(0, 14))
         self.name_label = label(self.content, name_key, style="AuthorName.TLabel", anchor="center")
         self.name_label.pack(fill="x")
@@ -99,4 +98,4 @@ class AuthorCard(ttk.Frame):
 
     def _resize_photo(self, event):
         size = max(visual.AUTHOR_PHOTO_MIN, min(visual.AUTHOR_PHOTO_MAX, event.height-110))
-        self.photo.configure(width=size, height=size)
+        self.photo.set_size(size)

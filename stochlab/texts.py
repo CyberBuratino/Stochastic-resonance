@@ -47,7 +47,6 @@ RU = {
     "author_stanislav": "Капитонов Станислав",
     "author_evgeniya": "Корж Евгения",
     "author_role": "Автор",
-    "author_photo": "Фото автора",
     "lecturer": "Лектор: Григорьев Кирилл Сергеевич",
     "supervisor": "Руководитель: Чичигина Ольга Александровна"
 }
@@ -96,7 +95,6 @@ EN = {
     "author_stanislav": "Stanislav Kapitonov",
     "author_evgeniya": "Evgeniya Korzh",
     "author_role": "Author",
-    "author_photo": "Author photo",
     "lecturer": "Lecturer: Kirill Sergeevich Grigoryev",
     "supervisor": "Supervisor: Olga Alexandrovna Chichigina"
 }

@@ -158,6 +158,8 @@ class Application(tk.Tk):
         style.theme_use("clam")
         colors = visual.UI_COLORS
         body_font = (visual.FONT_FAMILY, visual.BODY_FONT_SIZE)
+        control_font = (visual.FONT_FAMILY, visual.CONTROL_FONT_SIZE)
+        self.option_add("*TCombobox*Listbox.font", control_font)
         style.configure(".", font=body_font, background=colors["background"], foreground=colors["text"])
         style.configure("TFrame", background=colors["background"])
         style.configure("TLabel", background=colors["background"])
@@ -172,12 +174,11 @@ class Application(tk.Tk):
                         font=(visual.FONT_FAMILY, visual.SMALL_FONT_SIZE))
         style.configure("Title.TLabel", font=(visual.FONT_FAMILY, visual.TITLE_FONT_SIZE, "bold"))
         style.configure("Heading.TLabel", font=(visual.FONT_FAMILY, visual.HEADING_FONT_SIZE, "bold"))
+        style.configure("Readout.TLabel", font=control_font)
         style.configure("University.TLabel", font=(visual.FONT_FAMILY, 16, "bold"))
         style.configure("Faculty.TLabel", font=(visual.FONT_FAMILY, 14, "bold"))
         style.configure("AuthorName.TLabel", font=(visual.FONT_FAMILY, 18, "bold"))
         style.configure("AuthorCard.TFrame", background=colors["background"], bordercolor=colors["border"])
-        style.configure("Photo.TFrame", background=colors["panel"])
-        style.configure("Photo.TLabel", background=colors["panel"], foreground=colors["muted"])
         button_font = (visual.FONT_FAMILY, visual.BUTTON_FONT_SIZE)
         style.configure("TButton", padding=(9, 7), background=colors["button"], font=button_font)
         style.configure("Compact.TButton", padding=(4, 7),
@@ -222,7 +223,8 @@ class Application(tk.Tk):
             width = math.ceil(text_width/button_font.measure("0")) + 1
             self._button(self.navigation, name, lambda page=name: self.show_page(page), width=width).grid(row=0, column=index, padx=(0, 8))
         self.navigation.columnconfigure(4, weight=1)
-        self._button(self.navigation, "exit", self.destroy).grid(row=0, column=5, sticky="e")
+        exit_width = math.ceil(max(button_font.measure(RU["exit"]), button_font.measure(EN["exit"]))/button_font.measure("0"))+1
+        self._button(self.navigation, "exit", self.destroy, width=exit_width).grid(row=0, column=5, sticky="e")
 
     def _build_home(self):
         page = self._new_page("home")
@@ -244,6 +246,8 @@ class Application(tk.Tk):
         for name in ("lab", "theory", "authors", "exit"):
             command = self.destroy if name == "exit" else lambda target=name: self.show_page(target)
             self._button(menu, name, command, width=24).pack(fill="x", pady=3)
+        self.home_language_button = ttk.Button(menu, command=self.toggle_language)
+        self.home_language_button.pack(fill="x", pady=(9, 3))
 
     def _build_lab(self):
         page = self._new_page("lab")
@@ -266,6 +270,7 @@ class Application(tk.Tk):
                     wraplength=visual.SIDEBAR_WIDTH-2*visual.PANEL_PADDING).pack(anchor="w", pady=(10, 6))
         self._button(toolbar, "rotate", self.rotate).pack(fill="x", pady=(0, 6))
         controls = self.sidebar.content
+        control_font = (visual.FONT_FAMILY, visual.CONTROL_FONT_SIZE)
         controls.columnconfigure(0, weight=1)
         self.parameter_vars = {}
         self.parameter_entries = {}
@@ -275,7 +280,7 @@ class Application(tk.Tk):
             group.pack(fill="x", pady=(0, 10))
             self._label(group, key, style="Parameter.TLabel").pack(anchor="w")
             variable = tk.StringVar(value=str(getattr(self.parameters, name)))
-            entry = ttk.Entry(group, textvariable=variable, width=12)
+            entry = ttk.Entry(group, textvariable=variable, width=12, font=control_font)
             entry.pack(fill="x", pady=4)
             entry.bind("<Return>", self.apply_parameters)
             entry.bind("<FocusOut>", self.apply_parameters)
@@ -298,15 +303,15 @@ class Application(tk.Tk):
             self._button(presets, key, lambda temperature=value: self.set_temperature(temperature),
                          width=1, style="Compact.TButton").pack(fill="x", pady=2)
         self._label(controls, "history_window", style="Parameter.TLabel").pack(anchor="w")
-        self.history_box = ttk.Combobox(controls, state="readonly")
+        self.history_box = ttk.Combobox(controls, state="readonly", font=control_font)
         self.history_box.pack(fill="x", pady=(4, 14))
         self.history_box.bind("<<ComboboxSelected>>", self._history_selected)
         self._label(controls, "appearance", style="Parameter.TLabel").pack(anchor="w")
-        self.scheme_box = ttk.Combobox(controls, state="readonly")
+        self.scheme_box = ttk.Combobox(controls, state="readonly", font=control_font)
         self.scheme_box.pack(fill="x", pady=(4, 14))
         self.scheme_box.bind("<<ComboboxSelected>>", self._scheme_selected)
         self._label(controls, "speed", style="Parameter.TLabel").pack(anchor="w")
-        self.speed_box = ttk.Combobox(controls, state="readonly")
+        self.speed_box = ttk.Combobox(controls, state="readonly", font=control_font)
         self.speed_box.pack(fill="x", pady=(4, 12))
         self.speed_box.bind("<<ComboboxSelected>>", self._speed_selected)
         # Перехватываем колёсико до стандартного обработчика Combobox:
@@ -328,7 +333,7 @@ class Application(tk.Tk):
         self._label(heading, "potential", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         self.status_label = ttk.Label(heading)
         self.status_label.grid(row=0, column=1, sticky="e")
-        self.statistics_label = ttk.Label(field)
+        self.statistics_label = ttk.Label(field, style="Readout.TLabel")
         self.statistics_label.grid(row=1, column=0, sticky="w")
         self.potential_canvas = tk.Canvas(field, background="white", highlightthickness=0, height=180)
         self.potential_canvas.grid(row=2, column=0, sticky="nsew")
@@ -363,9 +368,10 @@ class Application(tk.Tk):
         cards.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 12))
         cards.rowconfigure(0, weight=1)
         self.author_cards = []
-        for column, key in enumerate(("author_stanislav", "author_evgeniya")):
+        for column, (key, filename) in enumerate((("author_stanislav", "photo_stas.jpg"),
+                                                ("author_evgeniya", "photo_eva.jpg"))):
             cards.columnconfigure(column, weight=1, uniform="authors")
-            card = AuthorCard(cards, key, self._label)
+            card = AuthorCard(cards, key, filename, self._label)
             card.grid(row=0, column=column, sticky="nsew", padx=(0, 12) if column == 0 else (12, 0))
             self.author_cards.append(card)
 
@@ -373,6 +379,7 @@ class Application(tk.Tk):
         scroll_position = self.sidebar.canvas.yview()[0]
         self.title(self.tr("title"))
         self.language_button.configure(text="EN" if self.language == "ru" else "RU")
+        self.home_language_button.configure(text=self.language_button.cget("text"))
         for widget, key in self._text_bindings:
             widget.configure(text=self.tr(key))
         self.scheme_box.configure(values=[visual.SCHEME_LABELS[key][self.language] for key in visual.SCHEMES])
@@ -400,10 +407,12 @@ class Application(tk.Tk):
             else:
                 page.grid_remove()
         if name == "home":
-            self.brand.grid_remove()
+            self.header.grid_remove()
+            self.navigation.grid_remove()
         else:
+            self.header.grid()
             self.brand.grid()
-        self.navigation.grid()
+            self.navigation.grid()
         self._update_labels()
         if entering_lab:
             self.start()

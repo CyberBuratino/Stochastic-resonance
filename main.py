@@ -24,6 +24,10 @@ def main() -> None:
                 raise RuntimeError("Missing or invalid logo: " + name)
         from stochlab.plotting import Scene
         from stochlab.rendering import render_scene
+        from PIL import Image
+        for name in ("photo_stas.jpg", "photo_eva.jpg"):
+            with Image.open(resource_path("assets/" + name)) as photo:
+                photo.verify()
         model = Model(Parameters())
         model.step()
         # Проверяем и Pillow, и включённый шрифт с кириллицей без окна.
@@ -56,8 +60,10 @@ def main() -> None:
                 if application.current_page != "home" or application.running or application.model.t != 0:
                     raise RuntimeError("Application did not open on the idle home screen")
                 check_emblems(application.home_header)
-                if not application.navigation.winfo_ismapped() or not application.language_button.winfo_ismapped():
-                    raise RuntimeError("Home navigation is not available")
+                if application.header.winfo_ismapped() or application.navigation.winfo_ismapped():
+                    raise RuntimeError("Home top panel should be hidden")
+                if not application.home_language_button.winfo_ismapped():
+                    raise RuntimeError("Home language button is not available")
             except Exception as error:
                 errors.append(str(error))
             application.show_page("authors")
@@ -77,8 +83,8 @@ def main() -> None:
                 if len(application.author_cards) != 2:
                     raise RuntimeError("Expected two author cards")
                 for card in application.author_cards:
-                    if not card.photo.winfo_ismapped() or not card.name_label.cget("text"):
-                        raise RuntimeError("Author placeholder or name is missing")
+                    if not card.photo.winfo_ismapped() or not card.photo.cget("image") or not card.name_label.cget("text"):
+                        raise RuntimeError("Author photo or name is missing")
             except Exception as error:
                 errors.append(str(error))
             application.show_page("lab")
@@ -110,7 +116,7 @@ def main() -> None:
         application.mainloop()
         if errors:
             raise RuntimeError("; ".join(errors))
-        print("OK: GUI, home and authors emblems, placeholders and both graph frames; automatic simulation start")
+        print("OK: GUI, home language menu, author photos and both graph frames; automatic simulation start")
         return
     application.mainloop()
 
