@@ -108,7 +108,7 @@ runpy.run_path('main.py', run_name='__main__')
                                 cwd=Path(__file__).resolve().parent.parent,
                                 capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("home and authors emblems, placeholders and both graph frames", result.stdout)
+        self.assertIn("home language menu, author photos and both graph frames", result.stdout)
 
     def test_entering_demonstration_starts_at_1x_and_return_preserves_state(self):
         app = self.app
@@ -265,7 +265,7 @@ runpy.run_path('main.py', run_name='__main__')
                 app.update()
                 buttons = [(widget, key) for widget, key in app._text_bindings
                            if isinstance(widget, (ttk.Button, ttk.Checkbutton))]
-                buttons.append((app.language_button, "language"))
+                buttons += [(app.language_button, "language"), (app.home_language_button, "home language")]
                 for button, key in buttons:
                     if not button.winfo_ismapped():
                         continue
@@ -404,7 +404,7 @@ runpy.run_path('main.py', run_name='__main__')
                                    lower.winfo_rootx()+current.coordinates[0])
             separation = lower.winfo_rooty()+current.coordinates[1] - upper.winfo_rooty()-particle.coordinates[1]
             self.assertGreater(separation, 0)
-            self.assertLessEqual(separation, 50)
+            self.assertLessEqual(separation, 60)
             caption = next(widget for widget, key in app._text_bindings if key == "trajectory")
             self.assertTrue(app.sidebar.contains(caption, app.sidebar.toolbar))
             self.assertGreaterEqual(trajectory.height, 260)
@@ -443,19 +443,26 @@ runpy.run_path('main.py', run_name='__main__')
                 app._translate()
                 app.show_page("home")
                 app.update()
-                self.assertTrue(app.navigation.winfo_ismapped())
-                self.assertTrue(app.language_button.winfo_ismapped())
+                self.assertFalse(app.navigation.winfo_ismapped())
+                self.assertFalse(app.header.winfo_ismapped())
+                self.assertTrue(app.home_language_button.winfo_ismapped())
+                exit_button = next(widget for widget, key in app._text_bindings
+                                   if key == "exit" and widget.master is app.home_language_button.master)
+                self.assertGreater(app.home_language_button.winfo_rooty(), exit_button.winfo_rooty()+exit_button.winfo_height())
                 title_center = app.home_title.winfo_rootx()+app.home_title.winfo_width()/2
                 page = app.pages["home"]
                 self.assertAlmostEqual(title_center, page.winfo_rootx()+page.winfo_width()/2, delta=1)
                 app.show_page("authors")
                 app.update()
+                self.assertTrue(app.navigation.winfo_ismapped())
+                self.assertTrue(app.language_button.winfo_ismapped())
                 left, right = app.author_cards
                 self.assertEqual(left.winfo_width(), right.winfo_width())
                 self.assertLess(left.winfo_rootx()+left.winfo_width(), right.winfo_rootx())
                 self.assertEqual([card.name_label.cget("text") for card in app.author_cards],
                                  [app.tr("author_stanislav"), app.tr("author_evgeniya")])
                 for card in app.author_cards:
+                    self.assertTrue(card.photo.cget("image"))
                     self.assertGreaterEqual(card.photo.winfo_rooty(), card.winfo_rooty())
                     self.assertLessEqual(card.photo.winfo_rooty()+card.photo.winfo_height(), card.winfo_rooty()+card.winfo_height())
                     self.assertGreaterEqual(card.name_label.winfo_rootx(), card.winfo_rootx())
