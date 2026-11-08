@@ -18,9 +18,10 @@ def main() -> None:
     if args.smoke_test:
         import tkinter
         from stochlab.model import Model, Parameters
-        logo = resource_path("assets/vmk-logo.png")
-        if logo.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
-            raise RuntimeError("Missing or invalid logo")
+        for name in ("vmk-logo.png", "physics-logo.png"):
+            logo = resource_path("assets/" + name)
+            if logo.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
+                raise RuntimeError("Missing or invalid logo: " + name)
         from stochlab.plotting import Scene
         from stochlab.rendering import render_scene
         model = Model(Parameters())
@@ -34,7 +35,7 @@ def main() -> None:
     from stochlab.app import Application
     application = Application(resource_path("assets/vmk-logo.png"))
     if args.smoke_test_gui:
-        # Проверяем стартовую иллюстрацию и оба графика через мост Pillow → Tk.
+        # Проверяем обе страницы оформления и графики через мост Pillow → Tk.
         from PIL import Image, ImageChops, ImageTk
         errors = []
         application.report_callback_exception = lambda kind, value, trace: errors.append(str(value))
@@ -54,7 +55,30 @@ def main() -> None:
             try:
                 if application.current_page != "home" or application.running or application.model.t != 0:
                     raise RuntimeError("Application did not open on the idle home screen")
-                check_frame(application.title_canvas)
+                check_emblems(application.home_header)
+                if not application.navigation.winfo_ismapped() or not application.language_button.winfo_ismapped():
+                    raise RuntimeError("Home navigation is not available")
+            except Exception as error:
+                errors.append(str(error))
+            application.show_page("authors")
+            application.after(250, check_authors)
+
+        def check_emblems(header):
+            for widget in (header.physics_label, header.vmk_label):
+                if not widget.winfo_ismapped() or not widget.cget("image"):
+                    raise RuntimeError("Academic emblem was not displayed")
+            for photo in application.emblems.values():
+                if ImageTk.getimage(photo).getchannel("A").getbbox() is None:
+                    raise RuntimeError("Academic emblem is empty")
+
+        def check_authors():
+            try:
+                check_emblems(application.authors_header)
+                if len(application.author_cards) != 2:
+                    raise RuntimeError("Expected two author cards")
+                for card in application.author_cards:
+                    if not card.photo.winfo_ismapped() or not card.name_label.cget("text"):
+                        raise RuntimeError("Author placeholder or name is missing")
             except Exception as error:
                 errors.append(str(error))
             application.show_page("lab")
@@ -86,7 +110,7 @@ def main() -> None:
         application.mainloop()
         if errors:
             raise RuntimeError("; ".join(errors))
-        print("OK: GUI, nonblank home illustration and both graph frames; automatic simulation start")
+        print("OK: GUI, home and authors emblems, placeholders and both graph frames; automatic simulation start")
         return
     application.mainloop()
 

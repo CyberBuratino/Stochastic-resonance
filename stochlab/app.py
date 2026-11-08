@@ -5,7 +5,6 @@
 """
 from collections import deque
 import math
-from pathlib import Path
 import time
 import tkinter as tk
 from tkinter import font as tkfont
@@ -13,7 +12,8 @@ from tkinter import ttk
 
 from . import appearance as visual
 from .model import Model, Parameters, PARAMETER_LIMITS
-from .plotting import ViewLimits, potential_scene, title_scene, trajectory_scene
+from .plotting import ViewLimits, potential_scene, trajectory_scene
+from .presentation import AcademicHeader, AuthorCard, load_emblems
 from .presets import DEMONSTRATION_SPEED, RESONANCE_PARAMETERS
 from .texts import EN, RU, THEORY_PLACEHOLDER
 
@@ -136,10 +136,11 @@ class Application(tk.Tk):
         self.container.rowconfigure(0, weight=1)
         self.container.columnconfigure(0, weight=1)
         self.pages = {}
+        self.emblems = load_emblems(self, logo_path)
         self._build_home()
         self._build_lab()
         self._build_theory()
-        self._build_authors(logo_path)
+        self._build_authors()
         self.bind_all("<MouseWheel>", self.sidebar.scroll_mouse)
         self.bind_all("<Button-4>", self.sidebar.scroll_mouse)
         self.bind_all("<Button-5>", self.sidebar.scroll_mouse)
@@ -171,6 +172,12 @@ class Application(tk.Tk):
                         font=(visual.FONT_FAMILY, visual.SMALL_FONT_SIZE))
         style.configure("Title.TLabel", font=(visual.FONT_FAMILY, visual.TITLE_FONT_SIZE, "bold"))
         style.configure("Heading.TLabel", font=(visual.FONT_FAMILY, visual.HEADING_FONT_SIZE, "bold"))
+        style.configure("University.TLabel", font=(visual.FONT_FAMILY, 16, "bold"))
+        style.configure("Faculty.TLabel", font=(visual.FONT_FAMILY, 14, "bold"))
+        style.configure("AuthorName.TLabel", font=(visual.FONT_FAMILY, 18, "bold"))
+        style.configure("AuthorCard.TFrame", background=colors["background"], bordercolor=colors["border"])
+        style.configure("Photo.TFrame", background=colors["panel"])
+        style.configure("Photo.TLabel", background=colors["panel"], foreground=colors["muted"])
         button_font = (visual.FONT_FAMILY, visual.BUTTON_FONT_SIZE)
         style.configure("TButton", padding=(9, 7), background=colors["button"], font=button_font)
         style.configure("Compact.TButton", padding=(4, 7),
@@ -219,25 +226,24 @@ class Application(tk.Tk):
 
     def _build_home(self):
         page = self._new_page("home")
-        # Равные колонки не зависят от длины перевода: рисунок остаётся на месте.
-        page.columnconfigure(0, weight=1, uniform="home")
-        page.columnconfigure(1, weight=1, uniform="home")
-        page.rowconfigure(0, weight=1)
-        left = ttk.Frame(page, padding=20)
-        left.grid(row=0, column=0, sticky="ew")
-        # Под заголовок зарезервирована одна и та же высота на обоих языках.
-        title_font = tkfont.Font(family=visual.FONT_FAMILY, size=visual.TITLE_FONT_SIZE, weight="bold")
-        title_area = ttk.Frame(left, height=title_font.metrics("linespace") * 3)
-        title_area.pack(fill="x", pady=(0, 24))
-        title_area.pack_propagate(False)
-        self.home_title = self._label(title_area, "title", style="Title.TLabel", wraplength=450)
-        self.home_title.pack(anchor="w")
-        left.bind("<Configure>", lambda event: self.home_title.configure(wraplength=max(200, event.width-40)))
-        for name in ("lab", "theory", "authors"):
-            self._button(left, name, lambda target=name: self.show_page(target), width=24).pack(anchor="w", pady=5)
-        self.title_canvas = tk.Canvas(page, background="white", highlightthickness=0)
-        self.title_canvas.grid(row=0, column=1, sticky="nsew")
-        self.title_canvas.bind("<Configure>", self.request_draw)
+        page.columnconfigure(0, weight=1)
+        page.rowconfigure(1, weight=1)
+        self.home_header = AcademicHeader(page, self.emblems, self._label)
+        self.home_header.grid(row=0, column=0, sticky="ew")
+        self.home_main = ttk.Frame(page)
+        self.home_main.grid(row=1, column=0, sticky="nsew")
+        self.home_main.columnconfigure(0, weight=1)
+        self.home_main.rowconfigure(0, weight=1)
+        self.home_main.rowconfigure(4, weight=2)
+        self._label(self.home_main, "course", anchor="center", justify="center").grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        self.home_title = self._label(self.home_main, "title", style="Title.TLabel", anchor="center", justify="center")
+        self.home_title.grid(row=2, column=0, sticky="ew", padx=20, pady=(14, 18))
+        self.home_main.bind("<Configure>", lambda event: self.home_title.configure(wraplength=max(300, event.width-40)))
+        menu = ttk.Frame(self.home_main)
+        menu.grid(row=3, column=0)
+        for name in ("lab", "theory", "authors", "exit"):
+            command = self.destroy if name == "exit" else lambda target=name: self.show_page(target)
+            self._button(menu, name, command, width=24).pack(fill="x", pady=3)
 
     def _build_lab(self):
         page = self._new_page("lab")
@@ -343,17 +349,25 @@ class Application(tk.Tk):
         self.theory_text.insert("1.0", THEORY_PLACEHOLDER)
         self.theory_text.configure(state="disabled")
 
-    def _build_authors(self, logo_path):
+    def _build_authors(self):
         page = self._new_page("authors")
-        content = ttk.Frame(page, padding=24)
-        content.pack(anchor="nw")
-        self._label(content, "authors", style="Heading.TLabel").pack(anchor="w", pady=(0, 18))
-        path = Path(logo_path) if logo_path else Path(__file__).resolve().parent.parent / "assets" / "vmk-logo.png"
-        self.logo_image = tk.PhotoImage(file=str(path)).subsample(2, 2)
-        ttk.Label(content, image=self.logo_image).pack(anchor="w", pady=(0, 18))
-        self._label(content, "author_names", font=(visual.FONT_FAMILY, 18, "bold")).pack(anchor="w", pady=(0, 18))
-        self._label(content, "faculty").pack(anchor="w", pady=(0, 18))
-        self._label(content, "teacher").pack(anchor="w")
+        page.columnconfigure(0, weight=1)
+        page.rowconfigure(2, weight=1)
+        self.authors_header = AcademicHeader(page, self.emblems, self._label)
+        self.authors_header.grid(row=0, column=0, sticky="ew")
+        staff = ttk.Frame(page)
+        staff.grid(row=1, column=0, sticky="ew", pady=(8, 16))
+        self._label(staff, "lecturer", font=(visual.FONT_FAMILY, 14), anchor="center").pack(fill="x", pady=3)
+        self._label(staff, "supervisor", font=(visual.FONT_FAMILY, 14), anchor="center").pack(fill="x", pady=3)
+        cards = ttk.Frame(page)
+        cards.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        cards.rowconfigure(0, weight=1)
+        self.author_cards = []
+        for column, key in enumerate(("author_stanislav", "author_evgeniya")):
+            cards.columnconfigure(column, weight=1, uniform="authors")
+            card = AuthorCard(cards, key, self._label)
+            card.grid(row=0, column=column, sticky="nsew", padx=(0, 12) if column == 0 else (12, 0))
+            self.author_cards.append(card)
 
     def _translate(self):
         scroll_position = self.sidebar.canvas.yview()[0]
@@ -386,11 +400,10 @@ class Application(tk.Tk):
             else:
                 page.grid_remove()
         if name == "home":
-            self.navigation.grid_remove()
             self.brand.grid_remove()
         else:
-            self.navigation.grid()
             self.brand.grid()
+        self.navigation.grid()
         self._update_labels()
         if entering_lab:
             self.start()
@@ -555,10 +568,7 @@ class Application(tk.Tk):
 
     def _draw(self):
         self._render_pending = False
-        if self.current_page == "home":
-            title_scene(max(250, self.title_canvas.winfo_width()),
-                        max(200, self.title_canvas.winfo_height()), self.scheme).draw(self.title_canvas)
-        elif self.current_page == "lab":
+        if self.current_page == "lab":
             # Добавляем текущую точку только в рисунок; история модели не меняется.
             cutoff = self.model.t - self.history_periods*2*math.pi/self.parameters.omega
             visible = [sample for sample in self.history if sample.t >= cutoff]

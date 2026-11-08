@@ -4,7 +4,9 @@
 
 **Авторы:** Капитонов Станислав, Корж Евгения — ВМК МГУ.
 
-**Преподаватель:** Чичигина Ольга Александровна.
+**Лектор:** Григорьев Кирилл Сергеевич.
+
+**Руководитель:** Чичигина Ольга Александровна.
 
 ## Запуск готового приложения
 
@@ -30,13 +32,13 @@ python main.py
 
 Windows: можно воспользоваться `start-windows.bat`; Linux: `sh start-linux.sh`. В Windows Tkinter устанавливается вместе с обычным Python с python.org при включённом компоненте Tcl/Tk. В Linux Tkinter иногда устанавливается отдельным пакетом, например `sudo apt install python3-tk`. Это требование относится к запуску исходников, а не готовой сборки.
 
-Если при обновлении исходников aggdraw ещё не установлен или его нативная библиотека не загружается, приложение автоматически рисует через Pillow со сглаживанием. Стартовая иллюстрация и графики продолжают работать; интернет для переключения не нужен. Для основного растеризатора AGG установите зависимости из `requirements.txt`. В Windows используйте `py -3 -m pip install -r requirements.txt`, чтобы установить их в тот Python, который запускает `start-windows.bat`.
+Если при обновлении исходников aggdraw ещё не установлен или его нативная библиотека не загружается, приложение автоматически рисует через Pillow со сглаживанием. Эмблемы на главной странице и графики продолжают работать; интернет для переключения не нужен. Для основного растеризатора AGG установите зависимости из `requirements.txt`. В Windows используйте `py -3 -m pip install -r requirements.txt`, чтобы установить их в тот Python, который запускает `start-windows.bat`.
 
 ## Управление
 
 На странице демонстрации **панель параметров прокручивается отдельно от графиков**. Колесо мыши над панелью или её вертикальная полоса прокрутки открывают нижние настройки. Область с частицей и двумя графиками остаётся на месте.
 
-При открытии приложения показывается главный экран. При переходе в «Демонстрацию» расчёт начинается автоматически; исходный темп — ×1. Возвращение в раздел продолжает текущую реализацию без сброса; вручную выбранный темп сохраняется. Кнопки «Старт», «Пауза», «Стоп» и «Режим резонанса» закреплены над прокручиваемыми параметрами. Надписи на всех кнопках увеличены, включая переключатель периодической силы. Названия параметров показаны шрифтом 16 pt. Температурные кнопки размещены по одной в строке, чтобы крупный текст помещался.
+При открытии приложения показывается титульный экран: эмблема физфака слева, эмблема ВМК справа, между ними — полное название МГУ и факультета. Курс, название проекта и кнопки меню выровнены по центру. На странице авторов — две равные карточки с плейсхолдерами фотографий, именами авторов, лектором и руководителем. Общие переходы и RU/EN доступны на всех страницах. При переходе в «Демонстрацию» расчёт начинается автоматически; исходный темп — ×1. Возвращение в раздел продолжает текущую реализацию без сброса; вручную выбранный темп сохраняется. Кнопки «Старт», «Пауза», «Стоп» и «Режим резонанса» закреплены над прокручиваемыми параметрами. Надписи на всех кнопках увеличены, включая переключатель периодической силы. Названия параметров показаны шрифтом 16 pt. Температурные кнопки размещены по одной в строке, чтобы крупный текст помещался.
 
 В верхней части окна расположены постоянные переходы «Главная» и «Демонстрация» и переключатель RU/EN. Смена языка не перестраивает размеры области графиков. Можно менять температуру T, параметры «Барьер» и «Глубина ям», амплитуду f, частоту ω и трение γ. Буквы a и b в подписях демонстрации не показываются. Поле зерна генератора убрано; внутреннее зерно сохраняется для воспроизводимости. Изменение физического параметра начинает новую реализацию. Старт продолжает расчёт, пауза сохраняет состояние, стоп сбрасывает траекторию. Быстрый темп меняет число шагов за секунду показа, а не шаг интегрирования. Поворот графика переключает вертикальную и горизонтальную ось времени.
 
@@ -84,7 +86,8 @@ Windows: можно воспользоваться `start-windows.bat`; Linux: `
 | `stochlab/rendering.py` | Растеризация линий AGG, надписи и буфер экранного кадра |
 | `stochlab/texts.py` | Русские и английские надписи; заглушка `TODO` для теории |
 | `stochlab/model.py` | Физическая модель и интегратор; для изменения оформления этот файл не нужен |
-| `assets/vmk-logo.png` | Логотип ВМК |
+| `stochlab/presentation.py` | Центрированная академическая шапка, эмблемы и карточки авторов |
+| `assets/vmk-logo.png`, `assets/physics-logo.png` | Локальные эмблемы ВМК и физфака |
 
 Начните с [руководства по изменению оформления](docs/EDITING.md). В нём описано, где менять цвета, надписи и размеры, не затрагивая исследование. Графический интерфейс использует стандартный Tkinter: HTML, CSS, JavaScript и веб-сервер не нужны.
 
@@ -121,11 +124,11 @@ python -m PyInstaller --clean --noconfirm stochastic_resonance.spec
 
 Результат — `dist/StochasticResonance/`. Для Windows сборку нужно выполнять на Windows, для Linux — на Linux. PyInstaller нужен только разработчику во время упаковки. Файл `requirements-build.txt` фиксирует версию упаковщика; приложение не импортирует его при работе.
 
-GitHub Actions выполняет тесты, включая запуск исходников без aggdraw, и собирает обе версии. `--smoke-test` проверяет ресурсы, а `--smoke-test-gui` открывает стартовую иллюстрацию и оба графика и проверяет, что показанные изображения не пустые. Состояние фактических проверок следует смотреть в соответствующем запуске Actions и [docs/VALIDATION.md](docs/VALIDATION.md).
+GitHub Actions выполняет тесты, включая запуск исходников без aggdraw, и собирает обе версии. `--smoke-test` проверяет ресурсы, а `--smoke-test-gui` проверяет титульную страницу, эмблемы, карточки авторов с плейсхолдерами, общую навигацию и оба графика. Состояние фактических проверок следует смотреть в соответствующем запуске Actions и [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Перед показом
 
-Проверьте запуск готовой сборки на компьютере преподавателя, доступные размеры окна, читаемость надписей и различимость линий в чёрно-белом режиме. Настоящие фотографии авторов можно добавить позднее; логотип ВМК включён в проект.
+Проверьте запуск готовой сборки на компьютере преподавателя, доступные размеры окна, читаемость надписей и различимость линий в чёрно-белом режиме. Настоящие фотографии авторов можно добавить позднее; обе эмблемы уже включены в проект и сборку.
 
 ## Источники
 
@@ -135,4 +138,4 @@ GitHub Actions выполняет тесты, включая запуск исх
 
 ## English quick start
 
-Download a successful GitHub Actions artifact for Windows or Linux, extract the **entire folder**, and run `StochasticResonance.exe` or `StochasticResonance`. The packaged app includes Python and Tk and works offline; the BAT launcher is not required. For source editing, use Python 3.11+ with Tkinter, install `python -m pip install -r requirements.txt`, then run `python main.py`. The app opens on the home screen. Entering Demonstration automatically starts the simulation at the default 1× speed; returning preserves the current trajectory and any manually selected speed. Large Start/Pause/Stop buttons and a Resonance preset button stay above the independently scrolling parameters. The preset restores all simulation settings and restarts a reproducible example; the random seed field is hidden. Parameter names use 16 pt type; the two potential controls are named Barrier and Well depth, with the a/b symbols omitted from the demonstration. The trajectory caption and Rotate button are in the fixed sidebar. The particle sits below the potential, close to the current trajectory endpoint; the vertical view uses a short dashed connector, while the rotated view keeps only the endpoint marker. The stationary potential is a neutral dashed reference behind the solid instantaneous potential. Choose quantity-based, state-based or monochrome colors; the state palette has no side-legend text. CSV/SVG export is removed; the Theory page displays only TODO. Graph axes are x, t, Ueff and F. Choose a three- or six-period time window (three by default); the last six periods remain available even while paused. Switching windows preserves the simulation and history, with blank prehistory at startup. Visual settings are in `stochlab/appearance.py`, the preset is in `stochlab/presets.py`, and the physical model is separate in `stochlab/model.py`.
+Download a successful GitHub Actions artifact for Windows or Linux, extract the **entire folder**, and run `StochasticResonance.exe` or `StochasticResonance`. The packaged app includes Python and Tk and works offline; the BAT launcher is not required. For source editing, use Python 3.11+ with Tkinter, install `python -m pip install -r requirements.txt`, then run `python main.py`. The app opens on a centered academic title page with Physics and CMC emblems, the university and faculty names, course and project title. The Authors page has two matching placeholder cards, author names, lecturer and supervisor. Navigation and language switching remain available on every page. Entering Demonstration automatically starts the simulation at the default 1× speed; returning preserves the current trajectory and any manually selected speed. Large Start/Pause/Stop buttons and a Resonance preset button stay above the independently scrolling parameters. The preset restores all simulation settings and restarts a reproducible example; the random seed field is hidden. Parameter names use 16 pt type; the two potential controls are named Barrier and Well depth, with the a/b symbols omitted from the demonstration. The trajectory caption and Rotate button are in the fixed sidebar. The particle sits below the potential, close to the current trajectory endpoint; the vertical view uses a short dashed connector, while the rotated view keeps only the endpoint marker. The stationary potential is a neutral dashed reference behind the solid instantaneous potential. Choose quantity-based, state-based or monochrome colors; the state palette has no side-legend text. CSV/SVG export is removed; the Theory page displays only TODO. Graph axes are x, t, Ueff and F. Choose a three- or six-period time window (three by default); the last six periods remain available even while paused. Switching windows preserves the simulation and history, with blank prehistory at startup. Visual settings are in `stochlab/appearance.py`, the preset is in `stochlab/presets.py`, and the physical model is separate in `stochlab/model.py`.

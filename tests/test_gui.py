@@ -73,7 +73,8 @@ class InterfaceTests(unittest.TestCase):
         with patch("stochlab.rendering.aggdraw", None):
             app.show_page("home")
             app.update()
-            check_frame(app.title_canvas)
+            self.assertTrue(app.home_header.physics_label.winfo_ismapped())
+            self.assertTrue(app.home_header.vmk_label.winfo_ismapped())
             app.show_page("lab")
             app.pause()
             app.advance_steps(1000)
@@ -107,7 +108,7 @@ runpy.run_path('main.py', run_name='__main__')
                                 cwd=Path(__file__).resolve().parent.parent,
                                 capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("nonblank home illustration and both graph frames", result.stdout)
+        self.assertIn("home and authors emblems, placeholders and both graph frames", result.stdout)
 
     def test_entering_demonstration_starts_at_1x_and_return_preserves_state(self):
         app = self.app
@@ -354,7 +355,7 @@ runpy.run_path('main.py', run_name='__main__')
         app.show_page("theory")
         self.assertEqual(app.theory_text.get("1.0", "end").strip(), "TODO")
         app.show_page("authors")
-        self.assertGreater(app.logo_image.width(), 100)
+        self.assertTrue(all(photo.width() >= 90 for photo in app.emblems.values()))
         app.toggle_language()
         self.assertEqual(app.tr("start"), "Старт")
 
@@ -413,7 +414,7 @@ runpy.run_path('main.py', run_name='__main__')
         for size in ("1240x880", "900x650"):
             app.geometry(size)
             app.update()
-            for page, canvases in (("home", (app.title_canvas,)),
+            for page, canvases in (("home", (app.home_header, app.home_main)),
                                    ("lab", (app.potential_canvas, app.trajectory_canvas))):
                 app.show_page(page)
                 app.pause()
@@ -432,6 +433,36 @@ runpy.run_path('main.py', run_name='__main__')
                                                  for c in canvases], (size, page, app.language))
                     self.assertEqual(before, self.snapshot())
                     self.assertEqual(scroll, app.sidebar.canvas.yview())
+
+    def test_academic_pages_have_centered_header_and_accessible_author_cards(self):
+        app = self.app
+        for size in ("1240x880", "900x650"):
+            app.geometry(size)
+            for language in ("ru", "en"):
+                app.language = language
+                app._translate()
+                app.show_page("home")
+                app.update()
+                self.assertTrue(app.navigation.winfo_ismapped())
+                self.assertTrue(app.language_button.winfo_ismapped())
+                title_center = app.home_title.winfo_rootx()+app.home_title.winfo_width()/2
+                page = app.pages["home"]
+                self.assertAlmostEqual(title_center, page.winfo_rootx()+page.winfo_width()/2, delta=1)
+                app.show_page("authors")
+                app.update()
+                left, right = app.author_cards
+                self.assertEqual(left.winfo_width(), right.winfo_width())
+                self.assertLess(left.winfo_rootx()+left.winfo_width(), right.winfo_rootx())
+                self.assertEqual([card.name_label.cget("text") for card in app.author_cards],
+                                 [app.tr("author_stanislav"), app.tr("author_evgeniya")])
+                for card in app.author_cards:
+                    self.assertGreaterEqual(card.photo.winfo_rooty(), card.winfo_rooty())
+                    self.assertLessEqual(card.photo.winfo_rooty()+card.photo.winfo_height(), card.winfo_rooty()+card.winfo_height())
+                    self.assertGreaterEqual(card.name_label.winfo_rootx(), card.winfo_rootx())
+                    self.assertLessEqual(card.name_label.winfo_rootx()+card.name_label.winfo_width(), card.winfo_rootx()+card.winfo_width())
+                for header in (app.home_header, app.authors_header):
+                    middle = header.text_area.winfo_rootx()+header.text_area.winfo_width()/2
+                    self.assertAlmostEqual(middle, header.winfo_rootx()+header.winfo_width()/2, delta=1)
 
     def test_small_window_and_keyboard_access_to_bottom(self):
         app = self.app
