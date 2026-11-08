@@ -41,9 +41,15 @@ RU = {
     "transitions": "Переходы",
     "invalid": "Проверьте диапазоны параметров. Для ненулевого барьера задайте положительную «Глубину ям».",
     "error": "Расчёт остановлен: ошибка вычисления. Нажмите «Стоп» для сброса.",
-    "author_names": "Капитонов Станислав\nКорж Евгения",
-    "faculty": "ВМК МГУ — факультет вычислительной\nматематики и кибернетики",
-    "teacher": "Преподаватель: Чичигина Ольга Александровна."
+    "university": "Московский государственный университет имени М. В. Ломоносова",
+    "faculty": "Факультет вычислительной математики и кибернетики",
+    "course": "Компьютерная демонстрация по курсу\n«Статистическая физика»",
+    "author_stanislav": "Капитонов Станислав",
+    "author_evgeniya": "Корж Евгения",
+    "author_role": "Автор",
+    "author_photo": "Фото автора",
+    "lecturer": "Лектор: Григорьев Кирилл Сергеевич",
+    "supervisor": "Руководитель: Чичигина Ольга Александровна"
 }
 
 EN = {
@@ -84,9 +90,15 @@ EN = {
     "transitions": "Transitions",
     "invalid": "Check parameter ranges. A nonzero barrier requires a positive Well depth setting.",
     "error": "Simulation stopped: numerical error. Press Stop to reset.",
-    "author_names": "Stanislav Kapitonov\nEvgeniya Korzh",
-    "faculty": "CMC MSU — Faculty of Computational\nMathematics and Cybernetics",
-    "teacher": "Teacher: Olga Alexandrovna Chichigina."
+    "university": "Lomonosov Moscow State University",
+    "faculty": "Faculty of Computational Mathematics and Cybernetics",
+    "course": "Computer demonstration for the course\nStatistical Physics",
+    "author_stanislav": "Stanislav Kapitonov",
+    "author_evgeniya": "Evgeniya Korzh",
+    "author_role": "Author",
+    "author_photo": "Author photo",
+    "lecturer": "Lecturer: Kirill Sergeevich Grigoryev",
+    "supervisor": "Supervisor: Olga Alexandrovna Chichigina"
 }
 
 THEORY_PLACEHOLDER = "TODO"

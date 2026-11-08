@@ -10,6 +10,8 @@ analysis = Analysis(
     binaries=[],
     datas=[
         (str(project_root / "assets" / "vmk-logo.png"), "assets"),
+        (str(project_root / "assets" / "physics-logo.png"), "assets"),
+        (str(project_root / "assets" / "physics-logo-LICENSE.txt"), "assets"),
         (str(project_root / "assets" / "fonts"), "assets/fonts"),
     ],
     # Pillow подключает мост к Tk динамически при первом кадре.
